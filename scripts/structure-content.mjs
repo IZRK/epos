@@ -245,6 +245,11 @@ function prepareContent(value = "", page = {}) {
   mergeAdjacentLinks($);
   splitLongParagraphs($);
   $('img[src$="/logoEPOS.png"][alt=""]').attr("alt", "European Plate Observing System logo");
+  if (page.type === "partner") {
+    const profileImage = $("img").first();
+    profileImage.attr({ loading: "eager", fetchpriority: "high" });
+    if (!normalizeText(profileImage.attr("alt"))) profileImage.attr("alt", `${page.title} building`);
+  }
 
   const usedIds = new Map();
   $("h2").each((_, heading) => {
@@ -495,6 +500,153 @@ function structureLegacyContent(html, pageUrl) {
   return $.html().trim();
 }
 
+function structureTransformProject($) {
+  const section = $(".content-section--intro").first().addClass("project-story project-story--transform");
+  const heading = section.children("h3").first();
+  const facts = section.children("ul").first().addClass("project-facts");
+  if (!heading.length || !facts.length) return;
+
+  heading[0].tagName = "h2";
+  heading.addClass("project-summary__title");
+  facts.children("li").addClass("project-fact");
+
+  const summary = $('<header class="project-summary"></header>').append(heading, facts);
+  const copy = $('<div class="project-story__copy"></div>').append(section.children().toArray());
+  section.empty().append(summary, copy);
+}
+
+function structureEposOnProject($) {
+  const section = $(".content-section--intro").first().addClass("project-story project-story--epos-on");
+  const figures = section.children("figure");
+  const paragraphs = section.children("p");
+  if (figures.length < 2 || !paragraphs.length) return;
+
+  const logo = figures.first().addClass("project-overview__logo");
+  const feature = figures.last().addClass("project-story__visual");
+  const lead = paragraphs.first().addClass("project-overview__lead");
+  lead[0].tagName = "h2";
+  const logoImage = logo.find("img").first();
+  const featureImage = feature.find("img").first();
+  logoImage.attr({ loading: "eager", fetchpriority: "high" });
+  featureImage.attr("loading", "eager");
+  if (!normalizeText(logoImage.attr("alt"))) logoImage.attr("alt", "EPOS ON");
+  if (!normalizeText(featureImage.attr("alt"))) {
+    featureImage.attr("alt", "EPOS ON project meeting participants");
+  }
+
+  const overview = $('<header class="project-overview"></header>')
+    .append($('<div class="project-overview__mark"></div>').append(logo))
+    .append($('<div class="project-overview__copy"></div>').append(lead));
+  const copy = $('<div class="project-story__copy"></div>').append(paragraphs.slice(1).toArray());
+  section.empty().append(overview, copy, feature);
+}
+
+function structureContactCard($) {
+  const section = $(".content-section--intro").first().addClass("contact-card");
+  const headings = section.children("h3");
+  const brand = headings.first();
+  const person = headings.eq(1);
+  const role = section.children("h4").first();
+  if (!brand.length || !person.length || !role.length) return;
+
+  brand[0].tagName = "p";
+  brand.addClass("contact-card__brand");
+  person[0].tagName = "h2";
+  person.addClass("contact-card__person");
+  role[0].tagName = "p";
+  role.addClass("contact-card__role");
+
+  const identity = $('<header class="contact-card__identity"></header>').append(brand, person, role);
+  const details = $('<div class="contact-card__details"></div>').append(section.children().toArray());
+  details.children("div").eq(0).addClass("contact-card__organization");
+  details.children("div").eq(1).addClass("contact-card__institute");
+  details.children("div").eq(2).addClass("contact-card__methods");
+  details.children("p").last().addClass("contact-card__social");
+  section.empty().append(identity, details);
+}
+
+function structureEposSp($) {
+  const section = $(".content-section--intro").first().addClass("programme-story programme-story--epos-sp");
+  const summary = section.children("p").first().addClass("programme-story__summary-text");
+  const columns = section.children(".wp-block-columns").first().addClass("programme-story__body");
+  const columnItems = columns.children(".wp-block-column");
+  if (!summary.length || columnItems.length < 2) return;
+
+  columnItems.first().addClass("programme-story__copy");
+  columnItems.last().addClass("programme-story__visual");
+  const image = columnItems.last().find("img").first();
+  image.attr({
+    alt: "EPOS Sustainability Phase project overview",
+    loading: "eager",
+    fetchpriority: "high"
+  });
+
+  const header = $('<header class="programme-story__summary"></header>').append(summary);
+  section.empty().append(header, columns);
+}
+
+function structureFundedProject($) {
+  const section = $(".content-section--intro").first().addClass("funded-project");
+  const paragraphs = section.children("p");
+  const visual = section.children("figure").first().addClass("funded-project__visual");
+  if (!paragraphs.length || !visual.length) return;
+
+  paragraphs.first().addClass("funded-project__title");
+  paragraphs.eq(1).addClass("funded-project__facts");
+  paragraphs.slice(2).addClass("funded-project__links");
+  const image = visual.find("img").first();
+  image.attr({
+    alt: "RI-SI-EPOS research infrastructure project overview",
+    loading: "eager",
+    fetchpriority: "high"
+  });
+
+  const copy = $('<div class="funded-project__copy"></div>').append(paragraphs.toArray());
+  section.empty().append(copy, visual);
+}
+
+function structureResearchPage($) {
+  const section = $(".content-section--intro").first().addClass("research-story");
+  section.children("p").first().addClass("research-story__lead");
+  const document = section.children("figure").first().addClass("research-story__document");
+  document.find("img").first().attr({
+    alt: "RI-SI-EPOS research equipment project overview",
+    loading: "eager"
+  });
+}
+
+function structureDataServices($) {
+  const section = $(".content-section--intro").first().addClass("data-services-story");
+  const source = section.find(".field-item").first();
+  const image = source.find("img").first();
+  if (!source.length || !image.length) return;
+
+  image.attr({
+    src: "/wp-content/uploads/2018/05/EPOS_ICSarchitecture_2016-01.png",
+    alt: "EPOS integrated core services architecture",
+    loading: "eager",
+    fetchpriority: "high"
+  }).removeAttr("width height").removeClass("alignleft size-medium");
+  const imageHtml = $.html(image);
+  image.closest("p").remove();
+
+  const copy = $('<div class="data-services-story__copy"></div>').append(source.children().toArray());
+  const visual = $(`<figure class="data-services-story__visual">${imageHtml}</figure>`);
+  section.empty().append(copy, visual);
+}
+
+function structureSpecialContent(html, pageUrl) {
+  const $ = cheerio.load(html, null, false);
+  if (pageUrl === "/epos-slovenia/epos-transform/") structureTransformProject($);
+  if (pageUrl === "/epos-slovenia/epos-on/") structureEposOnProject($);
+  if (pageUrl === "/contact/") structureContactCard($);
+  if (pageUrl === "/epos-sp/") structureEposSp($);
+  if (pageUrl === "/ri-si-epos/") structureFundedProject($);
+  if (pageUrl === "/research-sp/") structureResearchPage($);
+  if (pageUrl === "/data-services/") structureDataServices($);
+  return $.html().trim();
+}
+
 export default function structureContent(value = "", page = {}) {
   const html = String(value || "").trim();
   if (!html) return "";
@@ -552,7 +704,8 @@ export default function structureContent(value = "", page = {}) {
 
   const nodes = $.root().children().toArray();
   if (!nodes.some((node) => node.tagName === "h2")) {
-    return `<section class="content-section content-section--intro">${$.html().trim()}</section>`;
+    const intro = `<section class="content-section content-section--intro">${$.html().trim()}</section>`;
+    return structureSpecialContent(intro, page.url);
   }
 
   const sections = [];
@@ -578,5 +731,5 @@ export default function structureContent(value = "", page = {}) {
   if (["/home-2/", "/our-story/", "/our-services/"].includes(page.url)) {
     return structureLegacyContent(structured, page.url);
   }
-  return structured;
+  return structureSpecialContent(structured, page.url);
 }

@@ -1,8 +1,58 @@
 {% set heroLead = null %}
+{% set featureVisualSrc = null %}
+{% set featureVisualAlt = null %}
+{% set featureVisualWidth = null %}
+{% set featureVisualHeight = null %}
+{% set featureVisualModifier = null %}
 {% if sourcePage.type == 'partner' %}
   {% set heroLead = 'National expertise and infrastructure within EPOS Slovenia.' %}
 {% elif sourcePage.type == 'media' %}
   {% set heroLead = 'Videos and presentations from EPOS Slovenia.' %}
+{% elif sourcePage.url == '/epos-ip/' %}
+  {% set heroLead = 'A shared European infrastructure for solid Earth data, services and facilities.' %}
+  {% set featureVisualSrc = '/assets/images/epos-observation-network.webp' %}
+  {% set featureVisualAlt = 'Conceptual solid Earth observation network across Europe' %}
+  {% set featureVisualWidth = 1536 %}
+  {% set featureVisualHeight = 1024 %}
+  {% set featureVisualModifier = 'epos-eric' %}
+{% elif sourcePage.url == '/epos-slovenia/' %}
+  {% set heroLead = 'A national partnership connecting Slovenian Earth science to Europe.' %}
+  {% set featureVisualSrc = '/wp-content/uploads/2025/01/DJI_0080-scaled.jpg' %}
+  {% set featureVisualAlt = 'Aerial view of a Slovenian karst landscape' %}
+  {% set featureVisualWidth = 2560 %}
+  {% set featureVisualHeight = 1705 %}
+  {% set featureVisualModifier = 'slovenia' %}
+{% elif sourcePage.url == '/epos-sp/' %}
+  {% set heroLead = 'Building the long-term sustainability of the European Plate Observing System.' %}
+{% elif sourcePage.url == '/ri-si-epos/' %}
+  {% set heroLead = 'Research infrastructure for internationally competitive Slovenian Earth science.' %}
+{% elif sourcePage.url == '/research-sp/' %}
+  {% set heroLead = 'Field research enabled by new equipment across the EPOS Slovenia partnership.' %}
+  {% set featureVisualSrc = '/wp-content/uploads/2023/07/IMG_6211-scaled.jpg' %}
+  {% set featureVisualAlt = 'Researcher monitoring instruments in a karst cave' %}
+  {% set featureVisualWidth = 2560 %}
+  {% set featureVisualHeight = 1707 %}
+  {% set featureVisualModifier = 'research' %}
+{% elif sourcePage.url == '/slo-karst-nfo/' %}
+  {% set heroLead = 'A multidisciplinary near-fault observatory in Slovenia’s classical karst.' %}
+  {% set featureVisualSrc = '/wp-content/uploads/2023/07/IMG_6234-scaled.jpg' %}
+  {% set featureVisualAlt = 'Karst cave interior during fieldwork' %}
+  {% set featureVisualWidth = 2560 %}
+  {% set featureVisualHeight = 1707 %}
+  {% set featureVisualModifier = 'karst' %}
+{% elif sourcePage.url == '/data-services/' %}
+  {% set heroLead = 'Integrated data, models and services for understanding the solid Earth.' %}
+{% elif sourcePage.url == '/epos-slovenia/epos-transform/' %}
+  {% set heroLead = 'Advancing multidisciplinary near-fault observatories across Europe.' %}
+  {% set featureVisualSrc = '/assets/images/transform-fault-observatory.webp' %}
+  {% set featureVisualAlt = 'Conceptual multidisciplinary near-fault observatory' %}
+  {% set featureVisualWidth = 1536 %}
+  {% set featureVisualHeight = 1024 %}
+  {% set featureVisualModifier = 'transform' %}
+{% elif sourcePage.url == '/epos-slovenia/epos-on/' %}
+  {% set heroLead = 'Supporting the evolution and long-term sustainability of European solid Earth research.' %}
+{% elif sourcePage.url == '/contact/' %}
+  {% set heroLead = 'Get in touch with the EPOS Slovenia national representative.' %}
 {% endif %}
 {% include "components/page-hero.njk" %}
 <main id="main-content" class="main-content">
@@ -13,13 +63,30 @@
     <div class="content-layout{% if showContentIndex %} content-layout--indexed{% endif %}">
       {% if showContentIndex %}
         <aside class="content-index" aria-label="On this page">
-          <p>On this page</p>
-          <ol>
-            {% for item in sectionLinks %}<li><a href="#{{ item.id }}">{{ item.label }}</a></li>{% endfor %}
-          </ol>
+          <div class="content-index__desktop">
+            <p>On this page</p>
+            <ol>
+              {% for item in sectionLinks %}<li><a href="#{{ item.id }}">{{ item.label }}</a></li>{% endfor %}
+            </ol>
+          </div>
+          <details class="content-index__mobile" data-mobile-jump-menu>
+            <summary>
+              <span>On this page</span>
+              <span class="content-index__count">{{ sectionLinks.length }} sections</span>
+              <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="m5 7.5 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </summary>
+            <ol>
+              {% for item in sectionLinks %}<li><a href="#{{ item.id }}">{{ item.label }}</a></li>{% endfor %}
+            </ol>
+          </details>
         </aside>
       {% endif %}
-      <article class="wp-content prose-content{% if sourcePage.type == 'partner' %} partner-content{% endif %}{% if sourcePage.type == 'partner-publications' %} publication-content{% endif %}{% if sourcePage.url == '/partners/' %} institution-directory partner-directory{% endif %}{% if sourcePage.url == '/consortium/' %} institution-directory consortium-directory{% endif %}{% if sourcePage.type == 'partner' and sourcePage.url != '/partners/' %} partner-profile{% endif %}{% if sourcePage.url == '/contact/' or sourcePage.url == '/contact-us/' %} contact-content{% endif %}{% if sourcePage.url == '/epos-slovenia/' or sourcePage.type == 'post' %} milestone-content{% endif %}{% if isLegacyTemplate %} legacy-showcase{% endif %}{% if sourcePage.url == '/home-2/' %} legacy-showcase--home{% endif %}{% if sourcePage.url == '/our-story/' %} legacy-showcase--story{% endif %}{% if sourcePage.url == '/our-services/' %} legacy-showcase--services{% endif %}">
+      <article class="wp-content prose-content{% if sourcePage.type == 'partner' %} partner-content{% endif %}{% if sourcePage.type == 'partner-publications' %} publication-content{% endif %}{% if sourcePage.url == '/partners/' %} institution-directory partner-directory{% endif %}{% if sourcePage.url == '/consortium/' %} institution-directory consortium-directory{% endif %}{% if sourcePage.type == 'partner' and sourcePage.url != '/partners/' %} partner-profile{% endif %}{% if sourcePage.url == '/contact/' or sourcePage.url == '/contact-us/' %} contact-content{% endif %}{% if sourcePage.url == '/epos-slovenia/epos-transform/' %} project-content project-content--transform{% endif %}{% if sourcePage.url == '/epos-slovenia/epos-on/' %} project-content project-content--epos-on{% endif %}{% if sourcePage.url == '/epos-slovenia/' or sourcePage.type == 'post' %} milestone-content{% endif %}{% if featureVisualSrc and sourcePage.url != '/epos-slovenia/epos-transform/' %} visual-story visual-story--{{ featureVisualModifier }}{% endif %}{% if sourcePage.url == '/epos-sp/' %} programme-content{% endif %}{% if sourcePage.url == '/ri-si-epos/' %} funded-project-content{% endif %}{% if sourcePage.url == '/research-sp/' %} research-content{% endif %}{% if sourcePage.url == '/data-services/' %} data-services-content{% endif %}{% if isLegacyTemplate %} legacy-showcase{% endif %}{% if sourcePage.url == '/home-2/' %} legacy-showcase--home{% endif %}{% if sourcePage.url == '/our-story/' %} legacy-showcase--story{% endif %}{% if sourcePage.url == '/our-services/' %} legacy-showcase--services{% endif %}">
+      {% if featureVisualSrc %}
+        <figure class="page-feature-visual page-feature-visual--{{ featureVisualModifier }}">
+          <img src="{{ featureVisualSrc }}" width="{{ featureVisualWidth }}" height="{{ featureVisualHeight }}" alt="{{ featureVisualAlt }}" loading="eager" decoding="async" fetchpriority="high">
+        </figure>
+      {% endif %}
       {% if sourcePage.contentHtml %}
         {{ sourcePage.contentHtml | structureContent(sourcePage) | safe }}
       {% elif sourcePage.url == '/research/' %}

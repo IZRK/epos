@@ -583,6 +583,7 @@ function extractHeroImages(homeHtml, pageUrl, assetMap) {
   $(".n2-ss-slide-background-image img[src]").each((index, image) => {
     const element = $(image);
     const source = resolveAsset(element.attr("src"), pageUrl, assetMap);
+    if (source === "/wp-content/uploads/2023/07/20221201-DJI_0815-scaled-e1701077721809.jpg") return;
     if (images.some((item) => item.src === source)) return;
     const slide = element.closest(".n2-ss-slide-background");
     const title =
