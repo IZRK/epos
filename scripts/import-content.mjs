@@ -771,7 +771,7 @@ function buildAttachments(media, assetMap) {
     .sort((a, b) => a.url.localeCompare(b.url));
 }
 
-function buildStoryMap(storyItem, storyData, assetMap) {
+export function buildStoryMap(storyItem, storyData, assetMap) {
   const root = storyData.nodes?.[storyData.root];
   const cover = (root?.children || [])
     .map((id) => storyData.nodes[id])
@@ -956,7 +956,7 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

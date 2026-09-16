@@ -88,7 +88,14 @@
         </figure>
       {% endif %}
       {% if sourcePage.contentHtml %}
-        {{ sourcePage.contentHtml | structureContent(sourcePage) | safe }}
+        {% for segment in sourcePage.contentHtml | structureContent(sourcePage) | localMapSegments %}
+          {{ segment.html | safe }}
+          {% if segment.mapSlug %}
+            {% set mapSlug = segment.mapSlug %}
+            {% set mapTitle = 'SLO KARST NFO' %}
+            {% include "components/local-map.njk" %}
+          {% endif %}
+        {% endfor %}
       {% elif sourcePage.url == '/research/' %}
         <p class="empty-route-message">Research activities and equipment are presented in the current research section.</p>
         <p><a class="button button--primary" href="/research-sp/">View research</a></p>

@@ -42,16 +42,11 @@
               {% if block.ordered %}<ol class="story-list">{{ block.html | safe }}</ol>{% else %}<ul class="story-list">{{ block.html | safe }}</ul>{% endif %}
             {% elif block.type == 'map' %}
               <figure class="embed-card embed-card--map">
-                <div class="embed-frame embed-frame--map">
-                  <iframe
-                    src="https://zrc.maps.arcgis.com/apps/Embed/index.html?webmap={{ block.itemId }}{% if block.itemId == '12fdef716cc64c30b667b9100d2ef24f' %}&amp;extent=13.0777,45.5202,14.4346,46.0855{% endif %}&amp;zoom=true&amp;previewImage=false&amp;scale=true&amp;disable_scroll=true&amp;theme=light"
-                    title="{{ block.caption | stripHtml }}"
-                    loading="lazy"
-                    allowfullscreen>
-                  </iframe>
-                </div>
+                {% set mapSlug = 'stations' if block.itemId == 'daba1ce3c7c74957af450092afb31e41' else 'slo-karst' %}
+                {% set mapTitle = block.caption | stripHtml %}
+                {% include "components/local-map.njk" %}
                 <figcaption>{{ block.caption | safe }}</figcaption>
-                <p class="embed-fallback"><a href="https://www.arcgis.com/home/item.html?id={{ block.itemId }}" rel="noopener noreferrer">Open the interactive map in a new window</a></p>
+                <p class="embed-fallback"><a href="/maps/{{ mapSlug }}/" target="_blank" rel="noopener">Open full-screen map</a></p>
               </figure>
             {% elif block.type == 'video' %}
               <figure class="embed-card">

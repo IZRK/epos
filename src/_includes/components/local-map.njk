@@ -1,0 +1,9 @@
+<div class="local-map{% if fullscreenMap %} local-map--fullscreen{% endif %}" data-map="{{ mapSlug }}"{% if fullscreenMap %} data-fullscreen="true"{% endif %}>
+  <div class="map-canvas" aria-label="{{ mapTitle }}" role="region"></div>
+  <details class="map-panel">
+    <summary>Layers &amp; legend</summary>
+    <div class="map-layer-list"></div>
+  </details>
+  <p class="map-status" role="status">Loading map…</p>
+  <noscript>Enable JavaScript to use this interactive map.</noscript>
+</div>

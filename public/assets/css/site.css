@@ -3852,3 +3852,4 @@ figcaption,
     padding: 1rem 0;
   }
 }
+.wp-block-embed:has(.local-map) .wp-block-embed__wrapper::before { display:none; }

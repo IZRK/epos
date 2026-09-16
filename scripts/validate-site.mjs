@@ -47,7 +47,9 @@ const expectedRoutes = [
   "/sitemap.xml",
   "/wp-sitemap.xml",
   "/robots.txt",
-  "/404.html"
+  "/404.html",
+  "/maps/stations/",
+  "/maps/slo-karst/"
 ];
 
 for (const route of expectedRoutes) {
@@ -76,6 +78,10 @@ for (const file of htmlFiles) {
     errors.push(`${relative}: still links to the ArcGIS StoryMap shell`);
   }
   if ($(`iframe[src^="//"]`).length) errors.push(`${relative}: contains a protocol-relative iframe`);
+  for (const frame of $('iframe').toArray()) {
+    if (!/^https:\/\/www\.youtube(?:-nocookie)?\.com\/embed\//.test($(frame).attr('src') || '')) errors.push(`${relative}: only YouTube embeds are allowed`);
+  }
+  if ($('script[src^="http"],link[rel="stylesheet"][href^="http"],img[src^="http"],video[src^="http"],source[src^="http"]').length) errors.push(`${relative}: remote runtime resource`);
   if ($("iframe:not([title])").length) errors.push(`${relative}: iframe without title`);
   if ($("img:not([alt])").length) errors.push(`${relative}: image without alt attribute`);
   if ($(`a[href=""]`).length) errors.push(`${relative}: empty link target`);
@@ -96,7 +102,7 @@ for (const file of htmlFiles) {
     ids.add(id);
   });
 
-  for (const element of $("a[href],img[src],script[src],link[href],iframe[src],object[data]").toArray()) {
+  for (const element of $("a[href],img[src],script[src],link[href],iframe[src],object[data],video[src],source[src]").toArray()) {
     const attribute = element.tagName === "a" || element.tagName === "link" ? "href" : element.tagName === "object" ? "data" : "src";
     const rawUrl = $(element).attr(attribute);
     if (!rawUrl || /^(?:https?:|mailto:|tel:|data:|blob:|#)/i.test(rawUrl)) continue;
@@ -221,17 +227,8 @@ for (const route of ["/events/", "/events-2/"]) {
 
 const dataSitesHtml = await fs.readFile(outputPathFor("/data-sites/"), "utf8");
 const dataSites = cheerio.load(dataSitesHtml);
-if (dataSites(".embed-card--map iframe").length !== 2) errors.push("Data & Sites: expected two ArcGIS maps");
-if (dataSites('.embed-card--map iframe[src^="https://zrc.maps.arcgis.com/apps/Embed/index.html"]').length !== 2) {
-  errors.push("Data & Sites: maps are not using the ArcGIS iframe embeds");
-}
-if (
-  dataSites(
-    '.embed-card--map iframe[src*="webmap=12fdef716cc64c30b667b9100d2ef24f"][src*="extent=13.0777,45.5202,14.4346,46.0855"]'
-  ).length !== 1
-) {
-  errors.push("Data & Sites: SLO KARST NFO iframe does not preserve its published extent");
-}
+if (dataSites('.local-map[data-map="stations"]').length !== 1 || dataSites('.local-map[data-map="slo-karst"]').length !== 1) errors.push('Data & Sites: expected two shared local maps');
+if (dataSites('iframe[src*="youtube-nocookie.com/embed/NM1so88QNgc"]').length !== 1) errors.push('Data & Sites: YouTube video is missing');
 if (!dataSitesHtml.includes("The area south from Postojna")) errors.push("Data & Sites: NFO narrative is missing");
 for (const block of STORY.blocks) {
   const expectedText = normalize(block.description || block.html || "");
@@ -276,6 +273,7 @@ for (const sourcePage of DATA.pages) {
     reorderedContentRoutes.has(sourcePage.url)
   ) continue;
   const $ = cheerio.load(await fs.readFile(outputPathFor(sourcePage.url), "utf8"));
+  $('.local-map').remove();
   const expectedText = compactText(cheerio.load(sourcePage.contentHtml).root().text());
   if (compactText($("article.wp-content").text()) !== expectedText) {
     errors.push(`${sourcePage.url}: source content was not preserved`);

@@ -39,6 +39,11 @@ export default function (eleventyConfig) {
     return text.length > length ? `${text.slice(0, length - 1).trim()}…` : text;
   });
   eleventyConfig.addFilter("structureContent", structureContent);
+  eleventyConfig.addFilter("localMapSegments", (html) => html
+    .split(/(<iframe\b[^>]*src="https:\/\/zrc\.maps\.arcgis\.com\/[^>]*>[\s\S]*?<\/iframe>)/gi)
+    .map(part => /^<iframe/i.test(part)
+      ? { mapSlug: part.includes('daba1ce3c7c74957af450092afb31e41') ? 'stations' : 'slo-karst' }
+      : { html: part }));
   eleventyConfig.addFilter("contentHeadings", contentHeadings);
   eleventyConfig.addFilter("structureHomeContent", structureHomeContent);
   eleventyConfig.addFilter("storySections", (blocks = []) => {

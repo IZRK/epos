@@ -8,14 +8,27 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "node scripts/clean.mjs && eleventy",
-    "dev": "eleventy --serve",
-    "start": "eleventy --serve",
+    "build": "node scripts/build-map.mjs && node scripts/clean.mjs && eleventy",
+    "dev": "node scripts/build-map.mjs && eleventy --serve",
+    "start": "npm run dev",
+    "refresh:maps": "node scripts/import-maps.mjs",
     "refresh:content": "node scripts/import-content.mjs",
-    "test": "npm run build && node scripts/validate-site.mjs"
+    "test": "npm run build && node scripts/validate-site.mjs && node scripts/validate-maps.mjs",
+    "test:browser": "node scripts/test-maps-browser.mjs"
   },
   "devDependencies": {
     "@11ty/eleventy": "^3.1.2",
-    "cheerio": "^1.1.2"
+    "@playwright/test": "^1.63.0",
+    "cheerio": "^1.1.2",
+    "esbuild": "^0.28.2"
+  },
+  "dependencies": {
+    "@mapbox/vector-tile": "^3.0.0",
+    "@terraformer/arcgis": "^2.2.2",
+    "geojson-vt": "^5.0.2",
+    "leaflet": "^1.9.4",
+    "pbf": "^5.1.2",
+    "pmtiles": "^4.5.0",
+    "vt-pbf": "^3.1.3"
   }
 }

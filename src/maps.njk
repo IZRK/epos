@@ -1,0 +1,24 @@
+---
+mapNames: [stations, slo-karst]
+pagination:
+  data: mapNames
+  size: 1
+  alias: mapSlug
+permalink: "/maps/{{ mapSlug }}/index.html"
+---
+{% set fullscreenMap = true %}
+{% set mapTitle = 'EPOS & RI-SI-EPOS stations' if mapSlug == 'stations' else 'SLO KARST NFO' %}
+<!doctype html>
+<html lang="en" data-embed-page>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ mapTitle }} | EPOS Slovenia</title>
+    {% include "components/map-assets.njk" %}
+  </head>
+  <body class="map-embed">
+    <main aria-label="{{ mapTitle }}">
+      {% include "components/local-map.njk" %}
+    </main>
+  </body>
+</html>
