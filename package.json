@@ -11,7 +11,8 @@
     "build": "node scripts/build-map.mjs && node scripts/clean.mjs && eleventy",
     "dev": "node scripts/build-map.mjs && eleventy --serve",
     "start": "npm run dev",
-    "refresh:maps": "node scripts/import-maps.mjs",
+    "refresh:maps": "node scripts/import-maps.mjs && node scripts/build-reference-layers.mjs",
+    "build:reference-maps": "node scripts/build-reference-layers.mjs",
     "refresh:content": "node scripts/import-content.mjs",
     "test": "npm run build && node scripts/validate-site.mjs && node scripts/validate-maps.mjs",
     "test:browser": "node scripts/test-maps-browser.mjs"
@@ -29,6 +30,7 @@
     "leaflet": "^1.9.4",
     "pbf": "^5.1.2",
     "pmtiles": "^4.5.0",
+    "shpjs": "^6.2.0",
     "vt-pbf": "^3.1.3"
   }
 }

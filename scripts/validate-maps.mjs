@@ -24,9 +24,9 @@ for(const map of manifest.maps) for(const layer of map.layers) {
   const bytes=await fs.readFile(`public/assets/maps/${layer.archive}`);
   const source={getKey:()=>layer.id,getBytes:async(offset,length)=>({data:bytes.buffer.slice(bytes.byteOffset+offset,bytes.byteOffset+Math.min(bytes.length,offset+length))})};
   const archive=new PMTiles(source),header=await archive.getHeader();
-  assert.equal(header.tileType,1);assert.equal((await archive.getMetadata()).vector_layers[0].id,layer.id);
+  assert.equal(header.tileType,1);assert.equal((await archive.getMetadata()).vector_layers[0].id,layer.tileLayer || layer.id);
   const attributes=JSON.parse(await fs.readFile(`public/assets/maps/${layer.attributes}`));
-  const geojson=JSON.parse(await fs.readFile(`data/maps/${layer.id}.geojson`));
+  const geojson=JSON.parse(await fs.readFile(`data/maps/${layer.dataFile || `${layer.id}.geojson`}`));
   assert.equal(attributes.length,layer.count);
   assert.deepEqual(attributes,geojson.features.map(f=>f.properties));
   const expected=new Set(geojson.features.filter(f=>f.geometry.coordinates.length).map(f=>f.properties.__id));
@@ -37,7 +37,7 @@ for(const map of manifest.maps) for(const layer of map.layers) {
       if(entry.run===0) {walk(header.leafDirectoryOffset+entry.offset,entry.length);continue;}
       const [z]=tileIdToZxy(entry.id);
       const tile=new VectorTile(new PbfReader(gunzipSync(bytes.subarray(header.tileDataOffset+entry.offset,header.tileDataOffset+entry.offset+entry.length))));
-      const features=tile.layers[layer.id];assert.ok(features);tiles++;
+      const features=tile.layers[layer.tileLayer || layer.id];assert.ok(features);tiles++;
       for(let i=0;i<features.length;i++) {
         const feature=features.feature(i),id=feature.properties.__id;
         assert.ok(expected.has(id),`${layer.id}: unexpected feature ${id}`);
@@ -59,4 +59,11 @@ fresh.blocks.forEach((block,i)=>{assert.equal(block.type,local.blocks[i].type);f
 assert.deepEqual(local.credits.map(text),fresh.credits.map(text));
 const supported=new Set(['storycover','navigation','text','separator','webmap','embed','credits']);
 for(const id of original.nodes[original.root].children) assert.ok(supported.has(original.nodes[id].type),`Unaccounted StoryMap block ${id}`);
-console.log(`Verified ${fresh.blocks.length} StoryMap blocks and credits; ${manifest.maps.flatMap(m=>m.layers).length} archives, ${tiles} tiles, ${total} records (${empty} empty source geometries). All nonempty feature IDs and tiled attribute values preserved.`);
+const layers=manifest.maps.flatMap(m=>m.layers);
+const sourceFiles=await fs.readdir('data/maps');
+const publicFiles=await fs.readdir('public/assets/maps');
+assert.deepEqual(new Set(sourceFiles.filter(file=>file.endsWith('.geojson'))),new Set(layers.map(layer=>layer.dataFile || `${layer.id}.geojson`)),'Unreferenced GeoJSON sources');
+assert.deepEqual(new Set(publicFiles.filter(file=>file.endsWith('.pmtiles'))),new Set(layers.map(layer=>layer.archive)),'Unreferenced PMTiles archives');
+assert.deepEqual(new Set(publicFiles.filter(file=>file.endsWith('.json') && file!=='manifest.json')),new Set(layers.map(layer=>layer.attributes)),'Unreferenced attribute tables');
+const archiveCount=new Set(layers.map(layer=>layer.archive)).size;
+console.log(`Verified ${fresh.blocks.length} StoryMap blocks and credits; ${layers.length} layers sharing ${archiveCount} archives, ${tiles} tile checks, ${total} records (${empty} empty source geometries). All nonempty feature IDs and tiled attribute values preserved.`);

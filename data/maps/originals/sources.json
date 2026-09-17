@@ -1,0 +1,31 @@
+{
+  "karst": {
+    "file": "karst-2023.zip",
+    "label": "Gostinčar & Stepišnik · PANGAEA",
+    "url": "https://doi.org/10.1594/PANGAEA.965529",
+    "download": "https://download.pangaea.de/dataset/965529/files/Gostincar_Stepisnik_2023_Karst_in_Slovenia.zip",
+    "license": "CC BY 4.0",
+    "sha256": "9ecd560f9b3f392429714567b3770002f0ebe0d6c7741f6897c9898d5a8ea4ed"
+  },
+  "faults": {
+    "file": "active-faults-2020.zip",
+    "label": "GeoZS · MAF.SI",
+    "url": "https://egeologija.si/geonetwork/srv/eng/catalog.search#/metadata/0a02f07a-b0a4-46df-b4e3-2276f9aa5d9c",
+    "download": "https://egeologija.si/geonetwork/srv/slv/resources.get?uuid=0a02f07a-b0a4-46df-b4e3-2276f9aa5d9c&fname=shapefile_active_fault_database.zip&access=public",
+    "sha256": "812aa181273c5fee49e5c26d41e568cf147a39eeab7d03a40fc1f59b0458cf73"
+  },
+  "regions": {
+    "file": "nuts2-2024.zip",
+    "label": "Eurostat / GISCO · NUTS 2024",
+    "url": "https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics",
+    "download": "https://gisco-services.ec.europa.eu/distribution/v2/nuts/shp/NUTS_RG_01M_2024_4326_LEVL_2.shp.zip",
+    "sha256": "d25c0522970f9e7598ab65b29323cb04f4a6cc581d88b7e106599af310e32f88"
+  },
+  "country": {
+    "file": "nuts0-2024.zip",
+    "label": "Eurostat / GISCO · NUTS 2024",
+    "url": "https://ec.europa.eu/eurostat/web/gisco/geodata/statistical-units/territorial-units-statistics",
+    "download": "https://gisco-services.ec.europa.eu/distribution/v2/nuts/shp/NUTS_RG_01M_2024_4326_LEVL_0.shp.zip",
+    "sha256": "01643a54bd3f85c6fc06b6346db64d641659b6cb2fa03d2bfc5a91f4aad025d7"
+  }
+}

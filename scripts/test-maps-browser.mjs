@@ -33,6 +33,7 @@ try {
     await page.waitForFunction(()=>[...document.querySelectorAll('.map-status')].every(el=>el.dataset.pending==='0' && el.textContent===''));
     await page.waitForFunction(()=>[...document.querySelectorAll('.map-symbol img,.map-swatch img')].every(img=>img.complete && img.naturalWidth>0));
   };
+  const basemapSettled=()=>page.waitForFunction(()=>[...document.querySelectorAll('.leaflet-tile-pane img')].every(img=>img.complete && img.naturalWidth>0 && Number(getComputedStyle(img).opacity)>.999));
   for(const route of ['/maps/stations/','/maps/slo-karst/','/data-sites/','/slo-karst-nfo/']) {
     await page.goto(base+route);
     await page.locator('[data-ready="true"]').first().waitFor();
@@ -54,8 +55,24 @@ try {
     // Exercise initially hidden archives as well as the default visible layers.
     for(const input of await host.locator('.map-layer input').all()) await input.check();
     await settled();
-    assert.ok(await host.locator('path.leaflet-interactive').count()>0,'Polygon/line overlays did not render');
+    assert.ok(await host.locator('canvas.map-vector-tile').count()>0,'Polygon/line tiles did not render');
+    assert.ok(await host.locator('canvas.map-vector-tile').evaluateAll(tiles=>tiles.some(tile=>tile.hits?.length>0)),'Vector tiles contain no rendered features');
     await host.locator('.map-panel summary').click();
+    const polygonPoint=await host.evaluate(host=>{
+      const box=host.getBoundingClientRect();
+      for(const tile of host.querySelectorAll('canvas.map-vector-tile')) {
+        const rect=tile.getBoundingClientRect(),context=tile.getContext('2d');
+        for(let y=32;y<256;y+=32) for(let x=32;x<256;x+=32) {
+          const px=rect.left+x,py=rect.top+y;
+          if(px<box.left+55 || px>box.right-30 || py<box.top+85 || py>box.bottom-35 || py>innerHeight-30 || py<85) continue;
+          if(tile.hits?.some(hit=>hit.type===3 && context.isPointInPath(hit.path,x,y,'evenodd'))) return {x:px,y:py};
+        }
+      }
+    });
+    assert.ok(polygonPoint,'No clickable polygon found');
+    await page.mouse.click(polygonPoint.x,polygonPoint.y);
+    await host.locator('.map-popup').waitFor();
+    await host.locator('.leaflet-popup-close-button').click();
     await host.locator('.leaflet-control-zoom-in').click();
     await host.getByRole('button',{name:'Reset map view'}).click();
     assert.equal(await page.locator('iframe').count(),route==='/data-sites/'?1:0);
@@ -66,11 +83,45 @@ try {
   for(const route of ['/maps/slo-karst/','/data-sites/']) {
     await page.goto(base+route);await page.locator('[data-ready="true"]').first().waitFor();await settled();await page.locator('.map-symbol').first().waitFor();
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),route+' mobile overflow');
+    await basemapSettled();
     await page.screenshot({path:`/tmp/epos-${route.includes('maps')?'map':'story'}-mobile.png`,fullPage:route.includes('maps')});
   }
   await page.setViewportSize({width:1440,height:1000});
+  await page.goto(base+'/maps/stations/');await page.locator('.map-symbol').first().waitFor();await settled();
+  await basemapSettled();
+  await page.screenshot({path:'/tmp/epos-stations-desktop.png'});
   await page.goto(base+'/maps/slo-karst/');await page.locator('.map-symbol').first().waitFor();await settled();await page.locator('.map-panel summary').click();
+  await basemapSettled();
   await page.screenshot({path:'/tmp/epos-map-desktop.png'});
+  const seamPixels=await page.evaluate(async url=>{
+    const {paintTile}=await import(url);
+    const results=[];
+    for(const ratio of [1,2]) {
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=256*ratio;
+      const context=canvas.getContext('2d');
+      const ring=[[-64,-64],[4160,-64],[4160,4160],[-64,4160],[-64,-64]].map(([x,y])=>({x,y}));
+      const layer={extent:4096,length:1,feature:()=>({type:3,properties:{},loadGeometry:()=>[ring]})};
+      const style=()=>({fillColor:'#ff0000',fillOpacity:.5,color:'#000000',opacity:1,weight:2});
+      paintTile(context,layer,()=>({}),style,ratio);
+      for(const x of [0,1,127,254,255]) results.push([...context.getImageData(x*ratio,128*ratio,1,1).data]);
+      // MVT inner rings must remain holes, not acquire a second translucent fill.
+      context.clearRect(0,0,canvas.width,canvas.height);
+      const hole=[[1024,1024],[1024,3072],[3072,3072],[3072,1024],[1024,1024]].map(([x,y])=>({x,y}));
+      layer.feature=()=>({type:3,properties:{},loadGeometry:()=>[ring,hole]});
+      paintTile(context,layer,()=>({}),style,ratio);
+      results.push([...context.getImageData(128*ratio,128*ratio,1,1).data]);
+    }
+    return results;
+  },base+'/assets/js/map.js');
+  assert.deepEqual(seamPixels,[...Array(5).fill([255,0,0,128]),[0,0,0,0],...Array(5).fill([255,0,0,128]),[0,0,0,0]],'Buffered tile edges or polygon holes introduce visible bands');
+  console.log('Tile-edge transparency and polygon-hole regression passed at 1x and 2x pixel density.');
+  await page.locator('.map-panel summary').click();
+  // Exercise fresh-canvas overzoom above the archive's z12 maximum.
+  for(let i=0;i<5;i++) {await page.locator('.leaflet-control-zoom-in').click();await page.waitForFunction(()=>!document.querySelector('.leaflet-zoom-anim'));await settled();}
+  await basemapSettled();
+  assert.ok(await page.locator('canvas.map-vector-tile').evaluateAll(tiles=>tiles.every(tile=>parseFloat(getComputedStyle(tile).width)===256)),'Overzoom enlarged tile bitmaps');
+  assert.ok(await page.locator('canvas.map-vector-tile').evaluateAll(tiles=>tiles.some(tile=>Number(tile.dataset.zoom)>12)),'Overzoom was not exercised');
+  await page.screenshot({path:'/tmp/epos-map-overzoom.png'});
   await page.goto(base+'/media/');assert.equal(await page.locator('iframe[src*="youtube.com/embed/"]').count(),2);
   // A separate site's document can embed the standalone map; it loads the same component.
   await page.setContent(`<iframe title="Embedded map" src="${base}/maps/slo-karst/" width="900" height="600"></iframe>`);

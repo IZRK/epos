@@ -2,6 +2,8 @@ import L from 'leaflet';
 import { PMTiles } from 'pmtiles';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
+import { paintTile } from './tile-renderer.js';
+export { paintTile } from './tile-renderer.js';
 
 const assetBase = new URL('../maps/', import.meta.url);
 const local = name => new URL(name, assetBase).href;
@@ -79,18 +81,96 @@ function layerStatus(status,id,state) {
   status.textContent=values.includes('error')?'Some map data could not load. Toggle the layer to retry.':pending?'Loading map layers…':'';
 }
 
+function openFeaturePopup(map, definition, properties, latlng) {
+  L.popup({maxWidth:Math.min(420,map.getSize().x-50),minWidth:Math.min(230,map.getSize().x-50),autoPanPaddingTopLeft:[15,70],autoPanPaddingBottomRight:[15,25]})
+    .setLatLng(latlng).setContent(popup(definition,properties)).openOn(map);
+}
+
+class TiledVectors extends L.GridLayer {
+  constructor(def,status,index) {
+    super({tileSize:256,maxZoom:19,pane:`vectors-${index}`,keepBuffer:1});
+    this.def=def;this.status=status;this.index=index;
+    this.archive=new PMTiles(new LocalSource(local(def.archive)));
+    this.cache=new Map();
+    this.on('loading',()=>layerStatus(status,def.id,'loading'));
+    this.on('load',()=>layerStatus(status,def.id,this.failed?'error':'ready'));
+  }
+  onAdd(map) {
+    const pane=this.options.pane;
+    if(!map.getPane(pane)) map.createPane(pane).style.zIndex=String(410+this.index);
+    // Hit-testing happens on the map so empty upper tiles don't block lower layers.
+    this.failed=false;
+    super.onAdd(map);
+    map._eposVectors ||= new Set();
+    map._eposVectors.add(this);
+    if(!map._eposIdentify) {
+      map._eposIdentify=event=>{
+        for(const layer of [...map._eposVectors].sort((a,b)=>b.index-a.index)) {
+          const properties=layer.identify(event);
+          if(properties) {openFeaturePopup(map,layer.def,properties,event.latlng);break;}
+        }
+      };
+      map.on('click',map._eposIdentify);
+    }
+    map.on('zoomend',this.updateScale,this);
+    this.updateScale();
+  }
+  onRemove(map) {
+    map._eposVectors.delete(this);map.off('zoomend',this.updateScale,this);
+    super.onRemove(map);layerStatus(this.status,this.def.id,'off');
+  }
+  updateScale() {
+    const scale=591657527.591555/2**this._map.getZoom();
+    this.inScale=(!this.def.minScale || scale<=this.def.minScale) && (!this.def.maxScale || scale>=this.def.maxScale);
+    this.getContainer().style.display=this.inScale?'':'none';
+  }
+  createTile(coords,done) {
+    const canvas=document.createElement('canvas');
+    canvas.dataset.zoom=String(coords.z);canvas.dataset.layer=this.def.id;
+    const ratio=Math.min(2,window.devicePixelRatio || 1);
+    canvas.width=canvas.height=256*ratio;
+    canvas.className='map-vector-tile';canvas.style.pointerEvents='none';
+    const context=canvas.getContext('2d');
+    // Overzoom the geometry into fresh canvases, not enlarged bitmap tiles:
+    // line widths stay in screen pixels and remain sharp above archive maxzoom.
+    const z=Math.min(coords.z,12),factor=2**(coords.z-z),x=Math.floor(coords.x/factor),y=Math.floor(coords.y/factor);
+    const key=`${z}/${x}/${y}`;
+    if(!this.cache.has(key)) this.cache.set(key,this.archive.getZxy(z,x,y).then(result=>result?new VectorTile(new PbfReader(new Uint8Array(result.data))).layers[this.def.tileLayer || this.def.id]:null).catch(error=>{this.cache.delete(key);throw error;}));
+    this.cache.get(key).then(layer=>{
+      if(layer) canvas.hits=paintTile(context,layer,p=>symbolFor(this.def,p),s=>style(s,this.def.opacity),ratio,{scale:factor,offsetX:(coords.x-x*factor)*256,offsetY:(coords.y-y*factor)*256});
+      while(this.cache.size>256) this.cache.delete(this.cache.keys().next().value);
+      done(null,canvas);
+    }).catch(error=>{this.failed=true;layerStatus(this.status,this.def.id,'error');done(error,canvas);});
+    return canvas;
+  }
+  identify(event) {
+    if(!this.inScale || event.originalEvent?.target.closest('.leaflet-marker-icon,.leaflet-popup,.leaflet-control')) return;
+    const z=this._tileZoom;
+    if(z===undefined) return;
+    const point=this._map.project(event.latlng,z),x=Math.floor(point.x/256),y=Math.floor(point.y/256);
+    const tile=this._tiles[this._tileCoordsToKey({x,y,z})]?.el;
+    if(!tile?.hits) return;
+    const context=tile.getContext('2d'),px=point.x-x*256,py=point.y-y*256;
+    for(const hit of tile.hits.toReversed()) {
+      context.lineWidth=Math.max(8,hit.width);
+      if((hit.type===3 && context.isPointInPath(hit.path,px,py,'evenodd')) || context.isPointInStroke(hit.path,px,py)) {
+        return hit.properties;
+      }
+    }
+  }
+}
+
 class VectorOverlay extends L.Layer {
   constructor(def,status,index) { super(); this.def=def; this.status=status; this.index=index; this.archive=new PMTiles(new LocalSource(local(def.archive))); this.cache=new Map(); this.generation=0; }
   onAdd(map) {
     this.map=map;
-    const pane=`vectors-${this.index}`; if(!map.getPane(pane)) map.createPane(pane).style.zIndex=String(410+this.index);
+    const pane=`vectors-${this.index}`; if(!map.getPane(pane)) map.createPane(pane).style.zIndex=String(600+this.index);
     this.group=L.geoJSON(null,{pane,filter:f=>Boolean(symbolFor(this.def,f.properties)),style:f=>style(symbolFor(this.def,f.properties),this.def.opacity),pointToLayer:(f,latlng)=>{
       const symbol=symbolFor(this.def,f.properties); const w=(symbol?.width || symbol?.size || 12)*4/3, h=(symbol?.height || symbol?.size || 12)*4/3;
       return L.marker(latlng,{pane,keyboard:true,title:f.properties.Station || f.properties.Name || f.properties.IME || this.def.title,opacity:this.def.opacity,icon:L.divIcon({className:'map-symbol',html:symbolHTML(symbol),iconSize:[w,h],iconAnchor:[w/2-(symbol?.xoffset || 0),h/2+(symbol?.yoffset || 0)]})});
     },onEachFeature:(feature,layer)=>layer.on('click',event=>{
       // A standalone popup survives the tile refresh caused by its own auto-pan.
-      L.popup({maxWidth:Math.min(420,map.getSize().x-50),minWidth:Math.min(230,map.getSize().x-50),autoPanPaddingTopLeft:[15,70],autoPanPaddingBottomRight:[15,25]})
-        .setLatLng(event.latlng || layer.getLatLng()).setContent(popup(this.def,feature.properties)).openOn(map);
+      openFeaturePopup(map,this.def,feature.properties,event.latlng || layer.getLatLng());
     })}).addTo(map);
     map.on('moveend',this.update,this); this.update();
   }
@@ -105,7 +185,7 @@ class VectorOverlay extends L.Layer {
       const key=`${z}/${x}/${y}`;
       if(!this.cache.has(key)) this.cache.set(key,this.archive.getZxy(z,x,y).then(result=>{
         if(!result) return [];
-        const layer=new VectorTile(new PbfReader(new Uint8Array(result.data))).layers[this.def.id];
+        const layer=new VectorTile(new PbfReader(new Uint8Array(result.data))).layers[this.def.tileLayer || this.def.id];
         return Array.from({length:layer?.length || 0},(_,i)=>layer.feature(i).toGeoJSON(x,y,z));
       }).catch(error=>{this.cache.delete(key);throw error;}));
       requests.push(this.cache.get(key));
@@ -144,19 +224,24 @@ function showTable(host,layer) {
 async function initialize(host,manifest) {
   const def=manifest.maps.find(m=>m.slug===host.dataset.map);
   const canvas=host.querySelector('.map-canvas'),status=host.querySelector('.map-status');
-  const map=L.map(canvas,{scrollWheelZoom:host.dataset.fullscreen==='true',minZoom:5,maxZoom:19}).setView(def.center,def.zoom);
+  const map=L.map(canvas,{scrollWheelZoom:host.dataset.fullscreen==='true',minZoom:5,maxZoom:19});
+  const resetView=()=>def.bounds?map.fitBounds(def.bounds,{padding:[28,28],maxZoom:11}):map.setView(def.center,def.zoom);
+  resetView();
   map.attributionControl.setPrefix(false);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri — Esri, HERE, Garmin, Intermap, USGS, FAO, NPS, NRCAN, GeoBase, IGN, Kadaster NL, Ordnance Survey, METI, Esri Japan, Hong Kong, OpenStreetMap contributors, GIS User Community'}).addTo(map);
   L.control.scale({imperial:false}).addTo(map);
-  const reset=L.control({position:'topleft'});reset.onAdd=()=>{const button=element('button','⌂','map-reset leaflet-bar');button.type='button';button.title='Reset map view';button.setAttribute('aria-label','Reset map view');L.DomEvent.disableClickPropagation(button);button.addEventListener('click',()=>map.setView(def.center,def.zoom));return button;};reset.addTo(map);
+  const reset=L.control({position:'topleft'});reset.onAdd=()=>{const button=element('button','⌂','map-reset leaflet-bar');button.type='button';button.title='Reset map view';button.setAttribute('aria-label','Reset map view');L.DomEvent.disableClickPropagation(button);button.addEventListener('click',resetView);return button;};reset.addTo(map);
   const panel=host.querySelector('.map-layer-list');
-  const layers=def.layers.map((layer,i)=>({layer,overlay:new VectorOverlay(layer,status,i)}));
+  const layers=def.layers.map((layer,i)=>({layer,overlay:layer.geometryType==='esriGeometryPoint'?new VectorOverlay(layer,status,i):new TiledVectors(layer,status,i)}));
   for(const {layer,overlay} of layers.toReversed()) {
     const section=element('section',undefined,'map-layer'); const label=element('label');const checkbox=element('input');checkbox.type='checkbox'; checkbox.checked=layer.visible; label.append(checkbox,document.createTextNode(layer.title));section.append(label);
     const symbols=[...(layer.renderer.uniqueValueInfos || layer.renderer.classBreakInfos || [{symbol:layer.renderer.symbol,label:layer.renderer.label || layer.title}])];
     if(layer.renderer.defaultSymbol) symbols.push({symbol:layer.renderer.defaultSymbol,label:layer.renderer.defaultLabel || 'Other values'});
     for(const item of symbols) {const row=element('div',undefined,'map-legend-row');const swatch=element('span',undefined,'map-swatch');swatch.innerHTML=symbolHTML(item.symbol);row.append(swatch,document.createTextNode(item.label || item.value || layer.title));section.append(row);}
     if(layer.tiles===0) section.append(element('small','Source has no geometry; attributes are available.'));
+    if(layer.provenance) {
+      const source=element('a',layer.provenance.label,'map-source');source.href=layer.provenance.url;source.target='_blank';source.rel='noopener noreferrer';section.append(source);
+    }
     const table=element('button',`Attributes (${layer.count})`);table.type='button';table.addEventListener('click',()=>showTable(host,layer));section.append(table);panel.append(section);
     checkbox.addEventListener('change',()=>checkbox.checked?overlay.addTo(map):map.removeLayer(overlay));
   }

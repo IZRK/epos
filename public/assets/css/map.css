@@ -13,6 +13,8 @@
 .map-symbol img,.map-symbol svg { width:100%; height:100%; }
 .map-layer button,.map-table-dialog button { background:#f2f5f1; color:#193f2a; border:1px solid #cad5c8; padding:5px 9px; cursor:pointer; font:inherit; }
 .map-layer button { margin:7px 0 0 22px; font-size:12px; }
+.map-source { display:block; margin:8px 0 0 22px; font-size:11px; color:#52665c; }
+.map-vector-tile { pointer-events:none; }
 .map-status { position:absolute; bottom:25px; left:10px; z-index:1000; max-width:calc(100% - 20px); background:#fff; margin:0; padding:5px 8px; }
 .map-status:empty { display:none; }
 .map-reset { width:32px; height:32px; border:0; background:#fff; font:24px/1 system-ui; cursor:pointer; }
