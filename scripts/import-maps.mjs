@@ -81,6 +81,7 @@ for(const [slug,id] of mapDefs) {
       const storyLayer=storyNode?.data.mapLayers?.find(l=>l.id===layer.id);
       const entry={id:key,sourceId:layer.id,title:layer.title,visible:storyLayer?.visible ?? layer.visibility ?? true,opacity:layer.opacity ?? 1,geometryType:def.geometryType,renderer,popup:layer.popupInfo || source.popupInfo || null,fields:def.fields || [],minScale:layer.minScale ?? def.minScale ?? 0,maxScale:layer.maxScale ?? def.maxScale ?? 0,count:geojson.features.length,archive:`${key}.pmtiles`,attributes:`${key}.json`,...archive};
       await save(directory,entry.attributes,geojson.features.map(f=>f.properties));
+      entry.labelingInfo=structuredClone(def.drawingInfo?.labelingInfo || []);
       map.layers.push(entry);
       console.log(`${key}: ${entry.count} features, ${archive.tiles} tiles, ${(archive.bytes/1048576).toFixed(1)} MiB`);
     }

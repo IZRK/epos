@@ -6,6 +6,7 @@ import { PbfReader } from 'pbf';
 import { gunzipSync } from 'node:zlib';
 import * as cheerio from 'cheerio';
 import { buildStoryMap } from './import-content.mjs';
+import { referenceLayers } from './map-reference-style.mjs';
 
 const manifest=JSON.parse(await fs.readFile('public/assets/maps/manifest.json'));
 let total=0,tiles=0,empty=0;
@@ -60,6 +61,17 @@ assert.deepEqual(local.credits.map(text),fresh.credits.map(text));
 const supported=new Set(['storycover','navigation','text','separator','webmap','embed','credits']);
 for(const id of original.nodes[original.root].children) assert.ok(supported.has(original.nodes[id].type),`Unaccounted StoryMap block ${id}`);
 const layers=manifest.maps.flatMap(m=>m.layers);
+const carbonate=(await referenceLayers('slo-karst')).find(l=>/CarbonateRocks/.test(l.id));
+for(const map of manifest.maps) {
+  const references=await referenceLayers(map.slug);
+  for(const layer of map.layers) {
+    const reference=/Sloji_/.test(layer.sourceId)?carbonate:references.find(l=>l.id===layer.sourceId);
+    const normalize=renderer=>JSON.parse(JSON.stringify(renderer,(key,value)=>['imageData','url','localImage'].includes(key)?undefined:value));
+    assert.deepEqual(normalize(layer.renderer),normalize(reference.definition.drawingInfo.renderer),`${layer.id}: reference symbol changed`);
+    assert.deepEqual(layer.labelingInfo,reference.definition.drawingInfo.labelingInfo || [],`${layer.id}: reference labels missing`);
+    assert.equal(layer.opacity,reference.opacity ?? 1,`${layer.id}: reference opacity changed`);
+  }
+}
 const sourceFiles=await fs.readdir('data/maps');
 const publicFiles=await fs.readdir('public/assets/maps');
 assert.deepEqual(new Set(sourceFiles.filter(file=>file.endsWith('.geojson'))),new Set(layers.map(layer=>layer.dataFile || `${layer.id}.geojson`)),'Unreferenced GeoJSON sources');

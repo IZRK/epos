@@ -32,8 +32,17 @@ try {
   const settled=async()=>{
     await page.waitForFunction(()=>[...document.querySelectorAll('.map-status')].every(el=>el.dataset.pending==='0' && el.textContent===''));
     await page.waitForFunction(()=>[...document.querySelectorAll('.map-symbol img,.map-swatch img')].every(img=>img.complete && img.naturalWidth>0));
+    await page.waitForFunction(()=>[...document.querySelectorAll('canvas.map-vector-tile')].every(tile=>Number(getComputedStyle(tile).opacity)>.999));
   };
   const basemapSettled=()=>page.waitForFunction(()=>[...document.querySelectorAll('.leaflet-tile-pane img')].every(img=>img.complete && img.naturalWidth>0 && Number(getComputedStyle(img).opacity)>.999));
+  const zoomIn=async()=>{
+    const previous=await page.locator('canvas.map-vector-tile').evaluateAll(tiles=>Math.max(...tiles.map(tile=>Number(tile.dataset.zoom))));
+    await page.locator('.leaflet-control-zoom-in').click();
+    // Leaflet starts its zoom animation on a later frame. Waiting only for the
+    // absence of its animation class can return before the zoom even begins.
+    await page.waitForFunction(previous=>!document.querySelector('.leaflet-zoom-anim') && [...document.querySelectorAll('canvas.map-vector-tile')].some(tile=>Number(tile.dataset.zoom)>previous),previous);
+    await settled();
+  };
   for(const route of ['/maps/stations/','/maps/slo-karst/','/data-sites/','/slo-karst-nfo/']) {
     await page.goto(base+route);
     await page.locator('[data-ready="true"]').first().waitFor();
@@ -85,6 +94,20 @@ try {
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),route+' mobile overflow');
     await basemapSettled();
     await page.screenshot({path:`/tmp/epos-${route.includes('maps')?'map':'story'}-mobile.png`,fullPage:route.includes('maps')});
+    if(route==='/maps/slo-karst/') {
+      const labels=page.locator('.map-reference-label[data-layer*="active_fault"] textPath');
+      assert.equal(await labels.count(),0,'Fault labels should respect the reference minimum scale');
+      for(let i=0;i<2;i++) await zoomIn();
+      await labels.first().waitFor();
+      await basemapSettled();
+      await page.screenshot({path:'/tmp/epos-map-mobile-detail.png'});
+      await page.mouse.move(180,500);await page.mouse.down();await page.mouse.move(240,380,{steps:8});await page.mouse.up();
+      await settled();await labels.first().waitFor();
+      const names=await labels.allTextContents();assert.equal(new Set(names).size,names.length,'Duplicate mobile labels after panning');
+      await page.getByRole('button',{name:'Reset map view'}).click();await settled();
+      await page.waitForFunction(()=>!document.querySelector('.map-reference-label[data-layer*="active_fault"]'));
+      assert.equal(await labels.count(),0,'Stale labels after returning below the reference scale');
+    }
   }
   await page.setViewportSize({width:1440,height:1000});
   await page.goto(base+'/maps/stations/');await page.locator('.map-symbol').first().waitFor();await settled();
@@ -92,6 +115,28 @@ try {
   await page.screenshot({path:'/tmp/epos-stations-desktop.png'});
   await page.goto(base+'/maps/slo-karst/');await page.locator('.map-symbol').first().waitFor();await settled();await page.locator('.map-panel summary').click();
   await basemapSettled();
+  const faultLabels=page.locator('.map-reference-label[data-layer*="active_fault"] textPath');
+  await faultLabels.first().waitFor();
+  assert.ok(await faultLabels.count()>=5,'Expected named fault segments along the lines');
+  const names=await faultLabels.allTextContents();
+  assert.ok(names.some(name=>/Idrija|Raša|Predjama/.test(name)),'Missing reference fault names');
+  assert.equal(new Set(names).size,names.length,'Duplicate labels at tile boundaries');
+  const faultToggle=page.locator('.map-layer').filter({hasText:'Active faults in Slovenia'}).locator('input');
+  await faultToggle.uncheck();
+  await page.waitForFunction(()=>!document.querySelector('.map-reference-label[data-layer*="active_fault"]'));
+  await faultToggle.check();await settled();await faultLabels.first().waitFor();
+  const carbonatePixels=await page.locator('canvas[data-layer*="CarbonateRocks"]').evaluateAll(tiles=>{
+    let gray=0,colored=0;
+    for(const tile of tiles) {
+      const pixels=tile.getContext('2d').getImageData(0,0,tile.width,tile.height).data;
+      for(let i=0;i<pixels.length;i+=4) if(pixels[i+3]>50) {
+        if(pixels[i]===pixels[i+1] && pixels[i+1]===pixels[i+2]) gray++;else colored++;
+      }
+    }
+    return {gray,colored};
+  });
+  assert.ok(carbonatePixels.gray>10000,'Reference gray carbonate polygons did not render');
+  assert.equal(carbonatePixels.colored,0,'Carbonate polygons no longer match the grayscale reference');
   await page.screenshot({path:'/tmp/epos-map-desktop.png'});
   const seamPixels=await page.evaluate(async url=>{
     const {paintTile}=await import(url);
@@ -117,7 +162,7 @@ try {
   console.log('Tile-edge transparency and polygon-hole regression passed at 1x and 2x pixel density.');
   await page.locator('.map-panel summary').click();
   // Exercise fresh-canvas overzoom above the archive's z12 maximum.
-  for(let i=0;i<5;i++) {await page.locator('.leaflet-control-zoom-in').click();await page.waitForFunction(()=>!document.querySelector('.leaflet-zoom-anim'));await settled();}
+  for(let i=0;i<5;i++) await zoomIn();
   await basemapSettled();
   assert.ok(await page.locator('canvas.map-vector-tile').evaluateAll(tiles=>tiles.every(tile=>parseFloat(getComputedStyle(tile).width)===256)),'Overzoom enlarged tile bitmaps');
   assert.ok(await page.locator('canvas.map-vector-tile').evaluateAll(tiles=>tiles.some(tile=>Number(tile.dataset.zoom)>12)),'Overzoom was not exercised');
@@ -127,6 +172,10 @@ try {
   await page.setContent(`<iframe title="Embedded map" src="${base}/maps/slo-karst/" width="900" height="600"></iframe>`);
   await page.frameLocator('iframe').locator('[data-ready="true"]').waitFor();
   await page.frameLocator('iframe').locator('.map-symbol').first().waitFor();
+  // The same label renderer must also work inside the small embeddable map.
+  const embedded=page.frameLocator('iframe');
+  await embedded.locator('.leaflet-control-zoom-in').click();
+  await embedded.locator('.map-reference-label[data-layer*="active_fault"] textPath').first().waitFor();
   assert.ok(ranges>0,'PMTiles HTTP range requests were not exercised');
   assert.deepEqual(errors,[]);assert.deepEqual(failures,[]);
   for(const url of external) assert.match(url,/^https:\/\/(?:server\.arcgisonline\.com\/ArcGIS\/rest\/services\/World_Topo_Map\/MapServer\/tile\/|www\.youtube(?:-nocookie)?\.com\/embed\/)/);

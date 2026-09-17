@@ -14,7 +14,9 @@ export function paintTile(context, vectorLayer, symbolFor, styleFor, pixelRatio 
     if (!symbol) continue;
     const style = styleFor(symbol);
     const path = new Path2D();
+    const lines = [];
     for (const ring of feature.loadGeometry()) {
+      if(feature.type===2) lines.push(ring.map(point=>({x:point.x*scale-(viewport.offsetX || 0),y:point.y*scale-(viewport.offsetY || 0)})));
       ring.forEach((point, index) => {
         const method = index === 0 ? 'moveTo' : 'lineTo';
         path[method](point.x * scale - (viewport.offsetX || 0), point.y * scale - (viewport.offsetY || 0));
@@ -35,7 +37,7 @@ export function paintTile(context, vectorLayer, symbolFor, styleFor, pixelRatio 
       context.setLineDash(style.dashArray ? style.dashArray.split(/[ ,]+/).map(Number) : []);
       context.stroke(path);
     }
-    hits.push({ path, properties: feature.properties, type: feature.type, width: style.weight });
+    hits.push({ path, properties: feature.properties, type: feature.type, width: style.weight, lines });
   }
   context.restore();
   return hits;

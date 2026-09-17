@@ -3,6 +3,7 @@ import { PMTiles } from 'pmtiles';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { paintTile } from './tile-renderer.js';
+import { ReferenceLabels } from './reference-labels.js';
 export { paintTile } from './tile-renderer.js';
 
 const assetBase = new URL('../maps/', import.meta.url);
@@ -118,6 +119,7 @@ class TiledVectors extends L.GridLayer {
   onRemove(map) {
     map._eposVectors.delete(this);map.off('zoomend',this.updateScale,this);
     super.onRemove(map);layerStatus(this.status,this.def.id,'off');
+    this.labels?.schedule();
   }
   updateScale() {
     const scale=591657527.591555/2**this._map.getZoom();
@@ -140,6 +142,7 @@ class TiledVectors extends L.GridLayer {
       if(layer) canvas.hits=paintTile(context,layer,p=>symbolFor(this.def,p),s=>style(s,this.def.opacity),ratio,{scale:factor,offsetX:(coords.x-x*factor)*256,offsetY:(coords.y-y*factor)*256});
       while(this.cache.size>256) this.cache.delete(this.cache.keys().next().value);
       done(null,canvas);
+      this.labels?.schedule();
     }).catch(error=>{this.failed=true;layerStatus(this.status,this.def.id,'error');done(error,canvas);});
     return canvas;
   }
@@ -174,10 +177,10 @@ class VectorOverlay extends L.Layer {
     })}).addTo(map);
     map.on('moveend',this.update,this); this.update();
   }
-  onRemove(map) { ++this.generation; map.off('moveend',this.update,this); map.removeLayer(this.group); layerStatus(this.status,this.def.id,'off'); }
+  onRemove(map) { ++this.generation; map.off('moveend',this.update,this); map.removeLayer(this.group); layerStatus(this.status,this.def.id,'off'); this.labels?.schedule(); }
   async update() {
     const generation=++this.generation, zoom=this.map.getZoom(),scale=591657527.591555/2**zoom;
-    if((this.def.minScale && scale>this.def.minScale) || (this.def.maxScale && scale<this.def.maxScale)) {this.group.clearLayers(); layerStatus(this.status,this.def.id,'off'); return;}
+    if((this.def.minScale && scale>this.def.minScale) || (this.def.maxScale && scale<this.def.maxScale)) {this.group.clearLayers(); layerStatus(this.status,this.def.id,'off'); this.labels?.schedule(); return;}
     layerStatus(this.status,this.def.id,'loading');
     const z=Math.min(12,Math.max(0,Math.floor(zoom))), bounds=this.map.getPixelBounds(this.map.getCenter(),z), n=2**z;
     const requests=[];
@@ -197,6 +200,7 @@ class VectorOverlay extends L.Layer {
       this.group.clearLayers().addData(features.filter(f=>{if(f.geometry.type!=='Point') return true; if(seen.has(f.properties.__id)) return false; seen.add(f.properties.__id); return true;}));
       while(this.cache.size>256) this.cache.delete(this.cache.keys().next().value);
       layerStatus(this.status,this.def.id,'ready');
+      this.labels?.schedule();
     } catch(error) { if(generation===this.generation) layerStatus(this.status,this.def.id,'error'); console.error(error); }
   }
 }
@@ -233,6 +237,7 @@ async function initialize(host,manifest) {
   const reset=L.control({position:'topleft'});reset.onAdd=()=>{const button=element('button','⌂','map-reset leaflet-bar');button.type='button';button.title='Reset map view';button.setAttribute('aria-label','Reset map view');L.DomEvent.disableClickPropagation(button);button.addEventListener('click',resetView);return button;};reset.addTo(map);
   const panel=host.querySelector('.map-layer-list');
   const layers=def.layers.map((layer,i)=>({layer,overlay:layer.geometryType==='esriGeometryPoint'?new VectorOverlay(layer,status,i):new TiledVectors(layer,status,i)}));
+  new ReferenceLabels(layers).addTo(map);
   for(const {layer,overlay} of layers.toReversed()) {
     const section=element('section',undefined,'map-layer'); const label=element('label');const checkbox=element('input');checkbox.type='checkbox'; checkbox.checked=layer.visible; label.append(checkbox,document.createTextNode(layer.title));section.append(label);
     const symbols=[...(layer.renderer.uniqueValueInfos || layer.renderer.classBreakInfos || [{symbol:layer.renderer.symbol,label:layer.renderer.label || layer.title}])];
