@@ -24,6 +24,17 @@
 .map-attributes { border-collapse:collapse; width:100%; font-size:12px; text-align:left; }
 .map-attributes th,.map-attributes td { padding:6px 8px; border-bottom:1px solid #dae1d7; vertical-align:top; overflow-wrap:anywhere; }
 .map-attributes th { font-weight:650; }
+.map-popup .map-attributes { table-layout:fixed; }
+.map-popup .map-attributes th { width:40%; overflow-wrap:normal; word-break:normal; hyphens:none; }
+.map-popup .map-attributes td { overflow-wrap:anywhere; }
+.map-symbol.is-selected { outline:3px solid #00ffff; outline-offset:3px; background:#00ffff33; border-radius:3px; }
+.map-feature-navigation { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.map-feature-navigation button { cursor:pointer; padding:4px 8px; }
+@media(max-width:600px) {
+  .map-popup .map-attributes,.map-popup .map-attributes tbody,.map-popup .map-attributes tr,.map-popup .map-attributes th,.map-popup .map-attributes td { display:block; width:auto; }
+  .map-popup .map-attributes th { padding-bottom:0; border-bottom:0; }
+  .map-popup .map-attributes td { padding-top:2px; }
+}
 .map-attributes a { color:#245d3d; }
 .map-table-dialog { width:min(1100px,90vw); max-height:85dvh; border:1px solid #cad5c8; color:#263b30; padding:20px; }
 .map-table-dialog::backdrop { background:#0006; }

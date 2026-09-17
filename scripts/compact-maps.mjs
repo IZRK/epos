@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 export async function compactMaps(manifest) {
   const datasets=new Map(),obsolete=new Set();
   for(const map of manifest.maps) for(const layer of map.layers) {
+    if(layer.geometryType==='esriGeometryPoint') continue;
     const dataFile=layer.dataFile || `${layer.id}.geojson`;
     const data=await fs.readFile(`data/maps/${dataFile}`);
     const attributes=await fs.readFile(`public/assets/maps/${layer.attributes}`);
@@ -35,5 +36,5 @@ export async function compactMaps(manifest) {
   for(const file of await fs.readdir('public/assets/maps')) {
     if(/^symbol-.*\.png$/.test(file) && !referenced.has(file)) await fs.unlink(`public/assets/maps/${file}`);
   }
-  console.log(`Map data compacted: ${datasets.size} shared datasets for ${manifest.maps.flatMap(map=>map.layers).length} layers.`);
+  console.log(`Vector data compacted: ${datasets.size} shared polygon/line datasets. Station GeoJSON is kept separate.`);
 }

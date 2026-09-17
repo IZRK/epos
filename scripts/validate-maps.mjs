@@ -22,12 +22,32 @@ function directory(buffer) {
   return entries;
 }
 for(const map of manifest.maps) for(const layer of map.layers) {
+  const geojson=JSON.parse(await fs.readFile(`data/maps/${layer.dataFile || `${layer.id}.geojson`}`));
+  total+=layer.count;
+  if(layer.geometryType==='esriGeometryPoint') {
+    assert.ok(layer.geojson && !layer.archive && !layer.attributes,`${layer.id}: stations must not use tiles or duplicate attribute tables`);
+    assert.deepEqual(JSON.parse(await fs.readFile(`public/assets/maps/${layer.geojson}`)),geojson,`${layer.id}: station coordinates or attributes changed`);
+    assert.equal(geojson.features.length,layer.count);
+    assert.ok(geojson.features.every(f=>f.geometry.type==='Point' && f.geometry.coordinates.length>=2));
+    const webmap=JSON.parse(await fs.readFile(`data/maps/${map.slug}-webmap.json`));
+    const reference=webmap.operationalLayers.find(l=>l.id===layer.sourceId);
+    let original=reference.featureCollection?.layers?.[0]?.featureSet;
+    if(!original) {
+      const item=JSON.parse(await fs.readFile(`data/maps/${reference.itemId}.json`));
+      original=(item.layers || item.featureCollection.layers)[0].featureSet;
+    }
+    assert.equal(geojson.features.length,original.features.length,`${layer.id}: incomplete source station collection`);
+    for(let i=0;i<original.features.length;i++) {
+      const {__id,...attributes}=geojson.features[i].properties;
+      assert.deepEqual(attributes,original.features[i].attributes,`${layer.id}/${i}: original station attributes changed`);
+    }
+    continue;
+  }
   const bytes=await fs.readFile(`public/assets/maps/${layer.archive}`);
   const source={getKey:()=>layer.id,getBytes:async(offset,length)=>({data:bytes.buffer.slice(bytes.byteOffset+offset,bytes.byteOffset+Math.min(bytes.length,offset+length))})};
   const archive=new PMTiles(source),header=await archive.getHeader();
   assert.equal(header.tileType,1);assert.equal((await archive.getMetadata()).vector_layers[0].id,layer.tileLayer || layer.id);
   const attributes=JSON.parse(await fs.readFile(`public/assets/maps/${layer.attributes}`));
-  const geojson=JSON.parse(await fs.readFile(`data/maps/${layer.dataFile || `${layer.id}.geojson`}`));
   assert.equal(attributes.length,layer.count);
   assert.deepEqual(attributes,geojson.features.map(f=>f.properties));
   const expected=new Set(geojson.features.filter(f=>f.geometry.coordinates.length).map(f=>f.properties.__id));
@@ -49,7 +69,6 @@ for(const map of manifest.maps) for(const layer of map.layers) {
   }
   walk(header.rootDirectoryOffset,header.rootDirectoryLength);
   assert.deepEqual([...seen].sort((a,b)=>a-b),[...expected].sort((a,b)=>a-b),`${layer.id}: geometry lost from maxzoom tiles`);
-  total+=layer.count;
 }
 const original=JSON.parse(await fs.readFile('data/maps/story-source.json'));
 const local=JSON.parse(await fs.readFile('src/_data/storyMap.json'));
@@ -75,7 +94,8 @@ for(const map of manifest.maps) {
 const sourceFiles=await fs.readdir('data/maps');
 const publicFiles=await fs.readdir('public/assets/maps');
 assert.deepEqual(new Set(sourceFiles.filter(file=>file.endsWith('.geojson'))),new Set(layers.map(layer=>layer.dataFile || `${layer.id}.geojson`)),'Unreferenced GeoJSON sources');
-assert.deepEqual(new Set(publicFiles.filter(file=>file.endsWith('.pmtiles'))),new Set(layers.map(layer=>layer.archive)),'Unreferenced PMTiles archives');
-assert.deepEqual(new Set(publicFiles.filter(file=>file.endsWith('.json') && file!=='manifest.json')),new Set(layers.map(layer=>layer.attributes)),'Unreferenced attribute tables');
-const archiveCount=new Set(layers.map(layer=>layer.archive)).size;
+assert.deepEqual(new Set(publicFiles.filter(file=>file.endsWith('.pmtiles'))),new Set(layers.map(layer=>layer.archive).filter(Boolean)),'Unreferenced PMTiles archives');
+assert.deepEqual(new Set(publicFiles.filter(file=>file.endsWith('.json') && file!=='manifest.json')),new Set(layers.map(layer=>layer.attributes).filter(Boolean)),'Unreferenced attribute tables');
+assert.deepEqual(new Set(publicFiles.filter(file=>file.endsWith('.geojson'))),new Set(layers.map(layer=>layer.geojson).filter(Boolean)),'Unreferenced station GeoJSON');
+const archiveCount=new Set(layers.map(layer=>layer.archive).filter(Boolean)).size;
 console.log(`Verified ${fresh.blocks.length} StoryMap blocks and credits; ${layers.length} layers sharing ${archiveCount} archives, ${tiles} tile checks, ${total} records (${empty} empty source geometries). All nonempty feature IDs and tiled attribute values preserved.`);

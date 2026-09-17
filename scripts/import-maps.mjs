@@ -77,13 +77,18 @@ for(const [slug,id] of mapDefs) {
         for(const value of Object.values(object)) if(typeof value==='object') await localize(value);
       }
       await localize(renderer);
-      const archive=await writeArchive(new URL(`${key}.pmtiles`,directory),geojson,key);
+      const isPoint=def.geometryType==='esriGeometryPoint';
+      const archive=isPoint?{}:await writeArchive(new URL(`${key}.pmtiles`,directory),geojson,key);
       const storyLayer=storyNode?.data.mapLayers?.find(l=>l.id===layer.id);
       const entry={id:key,sourceId:layer.id,title:layer.title,visible:storyLayer?.visible ?? layer.visibility ?? true,opacity:layer.opacity ?? 1,geometryType:def.geometryType,renderer,popup:layer.popupInfo || source.popupInfo || null,fields:def.fields || [],minScale:layer.minScale ?? def.minScale ?? 0,maxScale:layer.maxScale ?? def.maxScale ?? 0,count:geojson.features.length,archive:`${key}.pmtiles`,attributes:`${key}.json`,...archive};
-      await save(directory,entry.attributes,geojson.features.map(f=>f.properties));
+      if(isPoint) {
+        entry.geojson=`${key}.geojson`;
+        delete entry.archive;delete entry.attributes;
+        await save(directory,entry.geojson,geojson);
+      } else await save(directory,entry.attributes,geojson.features.map(f=>f.properties));
       entry.labelingInfo=structuredClone(def.drawingInfo?.labelingInfo || []);
       map.layers.push(entry);
-      console.log(`${key}: ${entry.count} features, ${archive.tiles} tiles, ${(archive.bytes/1048576).toFixed(1)} MiB`);
+      console.log(isPoint?`${key}: ${entry.count} ordinary markers, local GeoJSON`:`${key}: ${entry.count} features, ${archive.tiles} tiles, ${(archive.bytes/1048576).toFixed(1)} MiB`);
     }
   }
   manifest.maps.push(map);

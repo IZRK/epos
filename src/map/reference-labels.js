@@ -94,7 +94,7 @@ export class ReferenceLabels extends L.Layer {
           }
           for(let visible of visibleLines(line,size.x,size.y)) {
             const span=length(visible);if(span<width+12) continue;
-            if(visible.at(-1).x<visible[0].x) visible=visible.toReversed();
+            if(visible.at(-1).x<visible[0].x) visible=[...visible].reverse();
             const labelLine=section(visible,(span-width)/2-4,(span+width)/2+4);
             // Avoid folding a name around a hairpin bend.
             if(distance(labelLine[0],labelLine.at(-1))<width*.75) continue;

@@ -4,6 +4,7 @@ import shp from 'shpjs';
 import { writeArchive } from './pmtiles-writer.mjs';
 import { compactMaps } from './compact-maps.mjs';
 import { applyReferenceStyles } from './map-reference-style.mjs';
+import { publishStations } from './publish-stations.mjs';
 
 const root='data/maps/originals/';
 const sources=JSON.parse(await fs.readFile(root+'sources.json'));
@@ -78,5 +79,6 @@ for(const map of manifest.maps) {
 manifest.referenceSourcesUpdatedAt=new Date().toISOString();
 await applyReferenceStyles(manifest);
 await compactMaps(manifest);
+await publishStations(manifest);
 await fs.writeFile(manifestFile,JSON.stringify(manifest)+'\n');
 await fs.writeFile(root+'sources.json',JSON.stringify(sources,null,2)+'\n');
