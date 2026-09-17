@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { stationRecords } from '../src/map/stations.js';
 
 const prefix=(process.env.PATH_PREFIX || '').replace(/\/$/,'');
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.mp4':'video/mp4','.pmtiles':'application/octet-stream'};
@@ -24,6 +25,9 @@ const origin=`http://127.0.0.1:${server.address().port}`,base=origin+prefix;
 const browserName=process.env.BROWSER || 'chromium';
 const browser=await ({chromium,firefox,webkit}[browserName]).launch({headless:true});
 const manifest=JSON.parse(await fs.readFile('public/assets/maps/manifest.json'));
+const stationSources=new Map();
+for(const layer of manifest.maps.flatMap(map=>map.layers).filter(layer=>layer.geojson)) stationSources.set(layer.id,JSON.parse(await fs.readFile(`public/assets/maps/${layer.geojson}`)));
+const expectedStations=(definition,all=false)=>stationRecords(definition.layers.filter(layer=>layer.geojson && (all || layer.visible)).map(layer=>({definition:layer,data:stationSources.get(layer.id)})));
 try {
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   // Keep the permitted embeds but do not test YouTube's third-party player internals.
@@ -50,8 +54,14 @@ try {
   const checkVisibleStations=async()=>{
     for(const host of await page.locator('[data-map]').all()) {
       const slug=await host.getAttribute('data-map');
-      for(const layer of manifest.maps.find(m=>m.slug===slug).layers.filter(l=>l.geojson && l.visible))
-        assert.equal(await host.locator(`.map-symbol[data-layer="${layer.id}"]`).count(),layer.count,`${browserName}/${slug}: missing default station markers`);
+      const definition=manifest.maps.find(m=>m.slug===slug),expected=expectedStations(definition);
+      assert.equal(await host.locator('.map-symbol').count(),expected.length,`${browserName}/${slug}: incorrect default station count`);
+      for(const layer of definition.layers.filter(l=>l.geojson && l.visible))
+        assert.equal(await host.locator(`.map-symbol[data-layer="${layer.id}"]`).count(),expected.filter(record=>record.definition.id===layer.id).length,`${browserName}/${slug}: incorrect default station markers`);
+      if(slug==='slo-karst') {
+        assert.equal(await host.locator('.map-symbol[title="JLSP"]').count(),1,'JLSP must appear once, not once per source copy');
+        assert.equal(await host.locator('.map-symbol svg circle').count(),0,'No invented fallback dots over station markers');
+      }
     }
   };
   for(const route of ['/maps/stations/','/maps/slo-karst/','/data-sites/','/slo-karst-nfo/']) {
@@ -63,23 +73,26 @@ try {
     const slug=await host.getAttribute('data-map');
     const definition=manifest.maps.find(map=>map.slug===slug);
     const assertMarkers=async all=>{
+      const expected=expectedStations(definition,all);
       for(const layer of definition.layers.filter(l=>l.geojson && (all || l.visible))) {
-        assert.equal(await host.locator(`.map-symbol[data-layer="${layer.id}"]`).count(),layer.count,`${browserName}/${route}: missing records in ${layer.id}`);
+        assert.equal(await host.locator(`.map-symbol[data-layer="${layer.id}"]`).count(),expected.filter(record=>record.definition.id===layer.id).length,`${browserName}/${route}: incorrect records in ${layer.id}`);
       }
     };
     await assertMarkers(false);
     await host.locator('.map-symbol').first().waitFor();
-    await host.locator('.map-symbol').first().click({force:true});
+    const station=host.locator('.map-symbol[title="JLSP"]').first();
+    await (await station.count()?station:host.locator('.map-symbol').first()).click({force:true});
     await host.locator('.map-popup').waitFor();
     assert.ok(await host.locator('.map-popup .map-attributes tr').count()>0);
-    assert.equal(await host.locator('.map-symbol.is-selected').count(),1,'Clicked station must be highlighted');
+    if(await station.count()) assert.equal(await host.locator('.map-popup h3').textContent(),'JLSP','Popup must identify the station, not its school/building');
+    assert.equal(await host.locator('.map-symbol.is-selected').count(),0,'Station clicks must not add a highlight');
     assert.ok(await host.locator('.map-popup th').evaluateAll(cells=>cells.every(cell=>getComputedStyle(cell).overflowWrap==='normal')),'Popup labels must not break inside words');
     if(await host.locator('.map-feature-navigation').count()) {
-      const first=await host.locator('.is-selected').getAttribute('data-feature');
+      const first=await host.locator('.map-popup h3').textContent();
       await host.locator('.map-feature-navigation').getByRole('button',{name:'Next',exact:true}).click();
-      assert.equal(await host.locator('.is-selected').count(),1);
+      assert.equal(await host.locator('.is-selected').count(),0);
       await host.locator('.map-feature-navigation').getByRole('button',{name:'Previous',exact:true}).click();
-      assert.equal(await host.locator('.is-selected').getAttribute('data-feature'),first);
+      assert.equal(await host.locator('.map-popup h3').textContent(),first);
     }
     if(route==='/maps/stations/') {await popupSettled();await page.screenshot({path:`/tmp/epos-station-popup-${browserName}.png`});}
     await host.locator('.leaflet-popup-close-button').click();
@@ -112,16 +125,15 @@ try {
       }
     });
     assert.ok(polygonPoint,'No clickable polygon found');
+    await host.evaluate(host=>{host._tilesBeforeClick=[...host.querySelectorAll('canvas.map-vector-tile')];});
     await page.mouse.click(polygonPoint.x,polygonPoint.y);
     await host.locator('.map-popup').waitFor();
-    await host.locator('canvas[data-selected="true"]').first().waitFor();
-    assert.ok(await host.locator('canvas[data-selected="true"]').evaluateAll(tiles=>tiles.some(tile=>{
-      const pixels=tile.getContext('2d').getImageData(0,0,tile.width,tile.height).data;
-      for(let i=0;i<pixels.length;i+=4) if(pixels[i]<20 && pixels[i+1]>230 && pixels[i+2]>230 && pixels[i+3]>200) return true;
-      return false;
-    })),'Selected geometry must actually paint a cyan outline');
+    await settled();
+    assert.equal(await host.locator('canvas[data-selected="true"]').count(),0,'Feature clicks must not paint a highlight');
+    assert.ok(await host.evaluate(host=>host._tilesBeforeClick.some(tile=>tile.isConnected)),'Opening a popup rebuilt all vector tiles');
     if(route==='/maps/slo-karst/') {await popupSettled();await page.screenshot({path:`/tmp/epos-feature-selection-${browserName}.png`});}
     await host.locator('.leaflet-popup-close-button').click();
+    assert.ok(await host.evaluate(host=>host._tilesBeforeClick.some(tile=>tile.isConnected)),'Closing a popup rebuilt all vector tiles');
     await host.locator('.leaflet-control-zoom-in').click();
     await host.getByRole('button',{name:'Reset map view'}).click();
     await settled();await assertMarkers(true);
@@ -151,7 +163,7 @@ try {
       await page.waitForFunction(()=>!document.querySelector('.map-reference-label[data-layer*="active_fault"]'));
       assert.equal(await labels.count(),0,'Stale labels after returning below the reference scale');
       await checkVisibleStations();
-      const firstMarker=page.locator('.map-symbol').first();
+      const firstMarker=page.locator('.map-symbol[title="POST"]').first();
       await firstMarker.click({force:true});await page.locator('.map-popup').waitFor();
       assert.ok(await page.locator('.map-popup th').evaluateAll(cells=>cells.every(cell=>getComputedStyle(cell).display==='block' && getComputedStyle(cell).overflowWrap==='normal')),'Mobile attribute labels must stack without splitting words');
       await popupSettled();

@@ -27,7 +27,6 @@
 .map-popup .map-attributes { table-layout:fixed; }
 .map-popup .map-attributes th { width:40%; overflow-wrap:normal; word-break:normal; hyphens:none; }
 .map-popup .map-attributes td { overflow-wrap:anywhere; }
-.map-symbol.is-selected { outline:3px solid #00ffff; outline-offset:3px; background:#00ffff33; border-radius:3px; }
 .map-feature-navigation { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
 .map-feature-navigation button { cursor:pointer; padding:4px 8px; }
 @media(max-width:600px) {

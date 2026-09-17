@@ -7,6 +7,7 @@ import { gunzipSync } from 'node:zlib';
 import * as cheerio from 'cheerio';
 import { buildStoryMap } from './import-content.mjs';
 import { referenceLayers } from './map-reference-style.mjs';
+import { stationRecords, stationName } from '../src/map/stations.js';
 
 const manifest=JSON.parse(await fs.readFile('public/assets/maps/manifest.json'));
 let total=0,tiles=0,empty=0;
@@ -80,6 +81,13 @@ assert.deepEqual(local.credits.map(text),fresh.credits.map(text));
 const supported=new Set(['storycover','navigation','text','separator','webmap','embed','credits']);
 for(const id of original.nodes[original.root].children) assert.ok(supported.has(original.nodes[id].type),`Unaccounted StoryMap block ${id}`);
 const layers=manifest.maps.flatMap(m=>m.layers);
+const stationLayers=[];
+for(const layer of manifest.maps.find(m=>m.slug==='slo-karst').layers.filter(l=>l.geojson && l.visible)) stationLayers.push({definition:layer,data:JSON.parse(await fs.readFile(`public/assets/maps/${layer.geojson}`))});
+const displayStations=stationRecords(stationLayers);
+assert.deepEqual(displayStations.map(record=>stationName(record.feature.properties)).sort(),['POST','MPJP','JLSP','MASE','GSNE','ILBA','Bojanci','PLCP','PVZ','TTPJ','JAVS','GBAS','CEY','SKDS','KNDS'].sort(),'Default NFO stations must appear exactly once');
+const withoutRed=stationRecords(stationLayers.filter(l=>!l.definition.sourceId.endsWith('_1832')));
+assert.equal(withoutRed.filter(r=>stationName(r.feature.properties)==='MPJP').length,1,'Disabling the override must retain the underlying station');
+assert.ok(withoutRed.find(r=>stationName(r.feature.properties)==='MPJP').definition.sourceId.endsWith('_2782'));
 const carbonate=(await referenceLayers('slo-karst')).find(l=>/CarbonateRocks/.test(l.id));
 for(const map of manifest.maps) {
   const references=await referenceLayers(map.slug);

@@ -4,6 +4,7 @@ import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { paintTile } from './tile-renderer.js';
 import { ReferenceLabels } from './reference-labels.js';
+import { symbolFor, stationName, stationRecords } from './stations.js';
 export { paintTile } from './tile-renderer.js';
 
 const assetBase = new URL('../maps/', import.meta.url);
@@ -16,8 +17,6 @@ function getStations(layer) {
   if(!stationData.has(layer.geojson)) stationData.set(layer.geojson,getJSON(local(layer.geojson)).catch(error=>{stationData.delete(layer.geojson);throw error;}));
   return stationData.get(layer.geojson);
 }
-const otherStationSymbol={type:'esriSMS',style:'esriSMSCircle',size:10,color:[74,93,120,255],outline:{type:'esriSLS',color:[255,255,255,255],width:1}};
-const stationSymbol=(layer,properties)=>symbolFor(layer,properties) || otherStationSymbol;
 
 // Also works on preview servers without byte ranges. Only those servers download the full archive.
 class LocalSource {
@@ -31,15 +30,6 @@ class LocalSource {
     if(response.status===200) { this.complete=data; return {data:data.slice(offset,offset+length)}; }
     return {data,etag:response.headers.get('etag') || undefined};
   }
-}
-function symbolFor(layer,properties) {
-  const r=layer.renderer;
-  if(r.type==='uniqueValue') {
-    const value=[r.field1,r.field2,r.field3].filter(Boolean).map(f=>properties[f] ?? '').join(r.fieldDelimiter || ', ');
-    return r.uniqueValueInfos.find(i=>String(i.value)===value)?.symbol || r.defaultSymbol;
-  }
-  if(r.type==='classBreaks') return r.classBreakInfos.find(i=>Number(properties[r.field])<=i.classMaxValue)?.symbol || r.defaultSymbol;
-  return r.symbol;
 }
 const color = (c,fallback='transparent') => c ? `rgba(${c[0]},${c[1]},${c[2]},${(c[3]??255)/255})` : fallback;
 function style(symbol,opacity=1) {
@@ -71,6 +61,9 @@ function attributeTable(layer,properties,all=false) {
   const table=element('table',undefined,'map-attributes');
   const fields=all ? layer.fields.map(f=>({fieldName:f.name,label:f.alias || f.name})) : layer.popup?.fieldInfos?.filter(f=>f.visible) || layer.fields.map(f=>({fieldName:f.name,label:f.alias || f.name}));
   for(const f of fields) {
+    // Station codes identify the observation station. Building/site descriptions
+    // remain available under All attributes, not as a competing station name.
+    if(!all && layer.geojson && properties.StationID && f.fieldName==='Station') continue;
     const row=element('tr'); const th=element('th',f.label || f.fieldName); th.scope='row';
     const td=element('td'); appendValue(td,formatted(properties[f.fieldName],f,layer.fields.find(d=>d.name===f.fieldName))); row.append(th,td); table.append(row);
   }
@@ -78,7 +71,7 @@ function attributeTable(layer,properties,all=false) {
 }
 function popup(layer,properties) {
   const box=element('div',undefined,'map-popup');
-  const title=layer.popup?.title?.replace(/\{([^}]+)\}/g,(_,key)=>properties[key] ?? '') || properties.Station || properties.Name || properties.IME || layer.title;
+  const title=(layer.geojson?stationName(properties):'') || layer.popup?.title?.replace(/\{([^}]+)\}/g,(_,key)=>properties[key] ?? '') || properties.Station || properties.Name || properties.IME || layer.title;
   box.append(element('h3',title),attributeTable(layer,properties));
   const details=element('details'); details.append(element('summary','All attributes'),attributeTable(layer,properties,true)); box.append(details); return box;
 }
@@ -94,8 +87,8 @@ function openFeaturePopup(map, definition, properties, latlng,owner,choices) {
   const candidates=choices || [{definition,properties,latlng,owner}];let index=0,selected;
   const window=L.popup({maxWidth:Math.min(440,map.getSize().x-80),minWidth:Math.min(340,map.getSize().x-80),autoPanPaddingTopLeft:[15,70],autoPanPaddingBottomRight:[15,25]});
   const render=()=>{
-    selected?.owner?.select(null);
-    selected=candidates[index];selected.owner?.select(selected.properties.__id);
+    selected=candidates[index];
+    window.featureOwner=selected.owner;
     const content=popup(selected.definition,selected.properties);
     L.DomEvent.disableClickPropagation(content);
     if(candidates.length>1) {
@@ -107,7 +100,6 @@ function openFeaturePopup(map, definition, properties, latlng,owner,choices) {
     }
     window.setLatLng(selected.latlng).setContent(content);
   };
-  window.on('remove',()=>selected?.owner?.select(null));
   render();window.openOn(map);
 }
 
@@ -141,7 +133,7 @@ class TiledVectors extends L.GridLayer {
     this.updateScale();
   }
   onRemove(map) {
-    if(this.selectedId!=null) map.closePopup();
+    if(map._popup?.featureOwner===this) map.closePopup();
     map._eposVectors.delete(this);map.off('zoomend',this.updateScale,this);
     super.onRemove(map);layerStatus(this.status,this.def.id,'off');
     this.labels?.schedule();
@@ -151,7 +143,6 @@ class TiledVectors extends L.GridLayer {
     this.inScale=(!this.def.minScale || scale<=this.def.minScale) && (!this.def.maxScale || scale>=this.def.maxScale);
     this.getContainer().style.display=this.inScale?'':'none';
   }
-  select(id) {this.selectedId=id;this.redraw();}
   createTile(coords,done) {
     const canvas=document.createElement('canvas');
     canvas.dataset.zoom=String(coords.z);canvas.dataset.layer=this.def.id;
@@ -166,13 +157,6 @@ class TiledVectors extends L.GridLayer {
     if(!this.cache.has(key)) this.cache.set(key,this.archive.getZxy(z,x,y).then(result=>result?new VectorTile(new PbfReader(new Uint8Array(result.data))).layers[this.def.tileLayer || this.def.id]:null).catch(error=>{this.cache.delete(key);throw error;}));
     this.cache.get(key).then(layer=>{
       if(layer) canvas.hits=paintTile(context,layer,p=>symbolFor(this.def,p),s=>style(s,this.def.opacity),ratio,{scale:factor,offsetX:(coords.x-x*factor)*256,offsetY:(coords.y-y*factor)*256});
-      if(this.selectedId!=null) {
-        context.save();context.scale(ratio,ratio);context.strokeStyle='#00ffff';context.lineWidth=4;context.lineJoin='round';
-        for(const hit of canvas.hits || []) if(hit.properties.__id===this.selectedId) {
-          context.stroke(hit.path);canvas.dataset.selected='true';
-        }
-        context.restore();
-      }
       while(this.cache.size>256) this.cache.delete(this.cache.keys().next().value);
       done(null,canvas);
       this.labels?.schedule();
@@ -196,15 +180,28 @@ class TiledVectors extends L.GridLayer {
   }
 }
 
+function refreshStations(map) {
+  const owners=[...map._eposPoints].sort((a,b)=>a.index-b.index);
+  const records=stationRecords(owners.map(owner=>({definition:owner.def,data:owner.data})));
+  for(const owner of owners) {
+    const features=records.filter(record=>record.definition===owner.def).map(record=>record.feature);
+    const ids=features.map(feature=>feature.properties.__id).join(',');
+    if(owner.renderedIds!==ids) {
+      owner.group.clearLayers().addData({type:'FeatureCollection',features});owner.renderedIds=ids;
+    }
+    owner.labels?.schedule();
+  }
+}
 class StationMarkers extends L.Layer {
   constructor(def,status,index) { super(); this.def=def; this.status=status; this.index=index;this.generation=0; }
   onAdd(map) {
     this.map=map;
+    this.renderedIds=undefined;
     map._eposPoints ||= new Set();map._eposPoints.add(this);
     const pane=`vectors-${this.index}`; if(!map.getPane(pane)) map.createPane(pane).style.zIndex=String(600+this.index);
     this.group=L.geoJSON(null,{pane,pointToLayer:(f,latlng)=>{
-      const symbol=stationSymbol(this.def,f.properties); const w=(symbol?.width || symbol?.size || 12)*4/3, h=(symbol?.height || symbol?.size || 12)*4/3;
-      return L.marker(latlng,{pane,keyboard:true,title:f.properties.StationID || f.properties.Station || f.properties.Name || f.properties.Name1 || f.properties.IME || this.def.title,opacity:this.def.opacity,icon:L.divIcon({className:'map-symbol',html:symbolHTML(symbol),iconSize:[w,h],iconAnchor:[w/2-(symbol?.xoffset || 0),h/2+(symbol?.yoffset || 0)]})});
+      const symbol=symbolFor(this.def,f.properties); const w=(symbol?.width || symbol?.size || 12)*4/3, h=(symbol?.height || symbol?.size || 12)*4/3;
+      return L.marker(latlng,{pane,keyboard:true,title:stationName(f.properties) || this.def.title,opacity:this.def.opacity,icon:L.divIcon({className:'map-symbol',html:symbolHTML(symbol),iconSize:[w,h],iconAnchor:[w/2-(symbol?.xoffset || 0),h/2+(symbol?.yoffset || 0)]})});
     },onEachFeature:(feature,marker)=>{
       marker.on('add',()=>{marker.getElement().dataset.layer=this.def.id;marker.getElement().dataset.feature=String(feature.properties.__id);});
       marker.on('click',()=>{
@@ -221,18 +218,14 @@ class StationMarkers extends L.Layer {
     }}).addTo(map);
     this.load();
   }
-  onRemove(map) { ++this.generation;if(this.selectedId!=null) map.closePopup();map._eposPoints.delete(this);map.removeLayer(this.group);layerStatus(this.status,this.def.id,'off');this.labels?.schedule(); }
-  select(id) {
-    this.selectedId=id;
-    this.group.eachLayer(marker=>marker.getElement()?.classList.toggle('is-selected',id!=null && marker.feature.properties.__id===id));
-  }
+  onRemove(map) { ++this.generation;if(map._popup?.featureOwner===this) map.closePopup();map._eposPoints.delete(this);map.removeLayer(this.group);refreshStations(map);layerStatus(this.status,this.def.id,'off');this.labels?.schedule(); }
   async load() {
     const generation=++this.generation;
     layerStatus(this.status,this.def.id,'loading');
     try {
       const data=await getStations(this.def);
       if(generation!==this.generation) return;
-      this.group.addData(data);
+      this.data=data;refreshStations(this.map);
       layerStatus(this.status,this.def.id,'ready');
       this.labels?.schedule();
     } catch(error) { if(generation===this.generation) layerStatus(this.status,this.def.id,'error'); console.error(error); }
@@ -276,7 +269,6 @@ async function initialize(host,manifest) {
     const section=element('section',undefined,'map-layer'); const label=element('label');const checkbox=element('input');checkbox.type='checkbox'; checkbox.checked=layer.visible; label.append(checkbox,document.createTextNode(layer.title));section.append(label);
     const symbols=[...(layer.renderer.uniqueValueInfos || layer.renderer.classBreakInfos || [{symbol:layer.renderer.symbol,label:layer.renderer.label || layer.title}])];
     if(layer.renderer.defaultSymbol) symbols.push({symbol:layer.renderer.defaultSymbol,label:layer.renderer.defaultLabel || 'Other values'});
-    if(layer.geojson && layer.renderer.type==='uniqueValue' && !layer.renderer.defaultSymbol) symbols.push({symbol:otherStationSymbol,label:'Other station / equipment records'});
     for(const item of symbols) {const row=element('div',undefined,'map-legend-row');const swatch=element('span',undefined,'map-swatch');swatch.innerHTML=symbolHTML(item.symbol);row.append(swatch,document.createTextNode(item.label || item.value || layer.title));section.append(row);}
     if(layer.tiles===0) section.append(element('small','Source has no geometry; attributes are available.'));
     if(layer.provenance) {
