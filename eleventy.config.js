@@ -4,7 +4,7 @@ import structureContent, { contentHeadings, structureHomeContent } from "./scrip
 export default function (eleventyConfig) {
   const rawPathPrefix = process.env.PATH_PREFIX || "/";
   const pathPrefix = rawPathPrefix === "/" ? "/" : `/${rawPathPrefix.replace(/^\/+|\/+$/g, "")}/`;
-  const baseUrl = (process.env.SITE_URL || "https://epos-ip.zrc-sazu.si").replace(/\/$/, "");
+  const baseUrl = (process.env.SITE_URL || "https://epos.zrc-sazu.si").replace(/\/$/, "");
 
   eleventyConfig.addPassthroughCopy({ public: "/" });
   eleventyConfig.addGlobalData("deployment", { pathPrefix, baseUrl });

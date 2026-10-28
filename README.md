@@ -31,24 +31,24 @@ npm test
 
 The workflow in `.github/workflows/pages.yml` publishes the site after pushes to `main` and can also be run manually. In the repository settings, set **Pages → Build and deployment → Source** to **GitHub Actions**.
 
-Both project Pages URLs and custom domains are supported. The workflow uses the Pages base path automatically, so the same source works at `username.github.io/repository/` and at the root of a custom domain. Configure the domain under **Settings → Pages → Custom domain**.
+The repository is <https://github.com/IZRK/epos>, published at <https://epos.zrc-sazu.si/>. Configure `epos.zrc-sazu.si` under **Settings → Pages → Custom domain**. The production workflow builds with `PATH_PREFIX=/` and `SITE_URL=https://epos.zrc-sazu.si`, so assets load from the domain root and canonical URLs use HTTPS.
 
-The repository is now <https://github.com/IZRK/epos>, published at <https://izrk.github.io/epos/>. After renaming the repository, rerun **Publish website**: already published HTML retains its previous asset prefix until rebuilt. Keep the workflow's `configure-pages` variables.
+After changing the domain or repository name, rerun **Publish website**: already published HTML retains its previous asset prefix until rebuilt. Project Pages URLs remain supported by setting `PATH_PREFIX=/repository` and `SITE_URL=https://username.github.io/repository` when building.
 
 Check this deployment locally with:
 
 ```sh
-PATH_PREFIX=/epos SITE_URL=https://izrk.github.io/epos npm test
+PATH_PREFIX=/ SITE_URL=https://epos.zrc-sazu.si npm test
 npx playwright install chromium
-PATH_PREFIX=/epos npm run test:browser
+npm run test:browser
 ```
 
 ## Local maps and StoryMap content
 
-The full StoryMap narrative is at **https://izrk.github.io/epos/data-sites/**. That content page, `/slo-karst-nfo/`, and standalone maps use one Leaflet component (`src/map/map.js` and `src/_includes/components/local-map.njk`). Standalone URLs are `/maps/stations/` and `/maps/slo-karst/`. Other sites can embed, for example:
+The full StoryMap narrative is at **https://epos.zrc-sazu.si/data-sites/**. That content page, `/slo-karst-nfo/`, and standalone maps use one Leaflet component (`src/map/map.js` and `src/_includes/components/local-map.njk`). Standalone URLs are `/maps/stations/` and `/maps/slo-karst/`. Other sites can embed, for example:
 
 ```html
-<iframe src="https://izrk.github.io/epos/maps/slo-karst/"
+<iframe src="https://epos.zrc-sazu.si/maps/slo-karst/"
         title="SLO KARST NFO" width="100%" height="650"
         style="border:0" loading="lazy" allowfullscreen></iframe>
 ```
